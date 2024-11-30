@@ -1,5 +1,3 @@
 .env*.local
 .env
-evi-env/include
-evi-env/bin
-evi-env/pyvenv.cfg
+evi-env
