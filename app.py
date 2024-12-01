@@ -2,6 +2,8 @@ import asyncio
 import base64
 import datetime
 import os
+import PySimpleGUI as sg
+import threading
 from dotenv import load_dotenv
 from hume.client import AsyncHumeClient
 from hume.empathic_voice.chat.socket_client import ChatConnectOptions, ChatWebsocketConnection
@@ -10,13 +12,32 @@ from hume.empathic_voice.types import UserInput
 from hume.core.api_error import ApiError
 from hume import MicrophoneInterface, Stream
 
+class EVIUI:
+    def __init__(self):
+        self.layout = [
+            [sg.Text("Transcription:", font=('Helvetica', 12))],
+            [sg.Multiline(size=(60, 10), key='-TRANSCRIPT-', autoscroll=True, disabled=True)],
+            [sg.Text("Top 3 Emotions:", font=('Helvetica', 12))],
+            [sg.Text("", size=(60, 1), key='-EMOTIONS-')]
+        ]
+        self.window = sg.Window("EVI Conversation", self.layout, finalize=True)
+
+    def update_transcript(self, text):
+        self.window['-TRANSCRIPT-'].print(text)
+
+    def update_emotions(self, emotions):
+        self.window['-EMOTIONS-'].update(emotions)
+
+    def close(self):
+        self.window.close()
+
 class WebSocketHandler:
     """Handler for containing the EVI WebSocket and associated socket handling behavior."""
 
-    def __init__(self):
-        """Construct the WebSocketHandler, initially assigning the socket to None and the byte stream to a new Stream object."""
+    def __init__(self, ui):
         self.socket = None
         self.byte_strs = Stream.new()
+        self.ui = ui
 
     def set_socket(self, socket: ChatWebsocketConnection):
         """Set the socket.
@@ -64,6 +85,7 @@ class WebSocketHandler:
             role = message.message.role.upper()
             message_text = message.message.content
             text = f"{role}: {message_text}"
+            self.ui.update_transcript(text)
             if message.from_text is False:
                 scores = dict(message.models.prosody.scores)
         elif message.type == "audio_output":
@@ -80,13 +102,14 @@ class WebSocketHandler:
             text = f"<{message_type}>"
         
         # Print the formatted message
-        self._print_prompt(text)
+        #self._print_prompt(text)
 
         # Extract and print the top 3 emotions inferred from user and assistant expressions
         if len(scores) > 0:
             top_3_emotions = self._extract_top_n_emotions(scores, 3)
-            self._print_emotion_scores(top_3_emotions)
-            print("")
+            #self._print_emotion_scores(top_3_emotions)
+            emotion_text = ' | '.join([f"{emotion} ({score:.2f})" for emotion, score in top_3_emotions.items()])
+            self.ui.update_emotions(emotion_text+"\n")
         else:
             print("")
         
@@ -104,15 +127,15 @@ class WebSocketHandler:
         """
         print(f"Error: {error}")
 
-    def _print_prompt(self, text: str) -> None:
-        """Print a formatted message with a timestamp.
+    # def _print_prompt(self, text: str) -> None:
+    #     """Print a formatted message with a timestamp.
 
-        Args:
-            text (str): The message text to be printed.
-        """
-        now = datetime.datetime.now(tz=datetime.timezone.utc)
-        now_str = now.strftime("%H:%M:%S")
-        print(f"[{now_str}] {text}")
+    #     Args:
+    #         text (str): The message text to be printed.
+    #     """
+    #     now = datetime.datetime.now(tz=datetime.timezone.utc)
+    #     now_str = now.strftime("%H:%M:%S")
+    #     print(f"[{now_str}] {text}")
 
     def _extract_top_n_emotions(self, emotion_scores: dict, n: int) -> dict:
         """
@@ -133,18 +156,18 @@ class WebSocketHandler:
 
         return top_n_emotions
 
-    def _print_emotion_scores(self, emotion_scores: dict) -> None:
-        """
-        Print the emotions and their scores in a formatted, single-line manner.
+    # def _print_emotion_scores(self, emotion_scores: dict) -> None:
+    #     """
+    #     Print the emotions and their scores in a formatted, single-line manner.
 
-        Args:
-            emotion_scores (dict): A dictionary of emotions and their corresponding confidence scores.
-        """
-        # Format the output string
-        formatted_emotions = ' | '.join([f"{emotion} ({score:.2f})" for emotion, score in emotion_scores.items()])
+    #     Args:
+    #         emotion_scores (dict): A dictionary of emotions and their corresponding confidence scores.
+    #     """
+    #     # Format the output string
+    #     formatted_emotions = ' | '.join([f"{emotion} ({score:.2f})" for emotion, score in emotion_scores.items()])
         
-        # Print the formatted string
-        print(f"|{formatted_emotions}|")
+    #     # Print the formatted string
+    #     print(f"|{formatted_emotions}|")
     
 
 async def sending_handler(socket: ChatWebsocketConnection):
@@ -159,7 +182,7 @@ async def sending_handler(socket: ChatWebsocketConnection):
         socket (ChatWebsocketConnection): The WebSocket connection used to send messages.
     """
     # Wait 3 seconds before executing the rest of the method
-    await asyncio.sleep(1)
+    await asyncio.sleep(3)
 
     # Construct a user input message
     # user_input_message = UserInput(text="Hello there!")
@@ -184,7 +207,18 @@ async def main() -> None:
     options = ChatConnectOptions(config_id=HUME_CONFIG_ID, secret_key=HUME_SECRET_KEY)
 
     # Instantiate the WebSocketHandler
-    websocket_handler = WebSocketHandler()
+    ui = EVIUI()
+    websocket_handler = WebSocketHandler(ui)
+
+    async def run_gui():
+        while True:
+            event, values = ui.window.read(timeout=100)
+            if event == sg.WINDOW_CLOSED:
+                break
+            await asyncio.sleep(0.1)
+        ui.close()
+
+    gui_task = asyncio.create_task(run_gui())
 
     # Open the WebSocket connection with the configuration options and the handler's functions
     async with client.empathic_voice.chat.connect_with_callbacks(
@@ -211,7 +245,7 @@ async def main() -> None:
         message_sending_task = asyncio.create_task(sending_handler(socket))
         
         # Schedule the coroutines to occur simultaneously
-        await asyncio.gather(microphone_task, message_sending_task)
+        await asyncio.gather(microphone_task, message_sending_task, gui_task)
 
 # Execute the main asynchronous function using asyncio's event loop
 if __name__ == "__main__":
