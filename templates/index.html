@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>E.A.S.E.</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        body {
+            font-family: 'Roboto', sans-serif;
+            background-color: #ffffff; /* White Background */
+            color: #1d2f4b; /* Dark Grey Text */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 2rem;
+        }
+        .logo {
+            max-width: 200px;
+            height: auto;
+            margin-bottom: 1.5rem;
+        }
+        #transcript-container {
+            width: 80%;
+            max-width: 600px;
+            background-color: #66c4d8; /* Blue Container */
+            border-radius: 10px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        #transcript {
+            width: 100%;
+            height: 300px;
+            border: none;
+            background-color: #ffffff; /* White Background */
+            color: #1d2f4b; /* Dark Grey Text */
+            padding: 1rem;
+            margin-bottom: 1rem;
+            overflow-y: scroll;
+            border-radius: 5px;
+            font-size: 0.9rem;
+            line-height: 1.4; /* Improve readability */
+        }
+        #emotions {
+            background-color: #84d8b7; /* Green Container */
+            color: #1d2f4b; /* Dark Grey Text */
+            padding: 0.8rem;
+            border-radius: 5px;
+            margin-bottom: 1rem;
+            font-weight: bold;
+            text-align: center;
+        }
+        #error {
+            color: #ff6b6b;
+            margin-bottom: 1rem;
+            font-weight: bold;
+            text-align: center;
+        }
+        #stopButton {
+            background-color: #84d8b7; /* Green Button */
+            color: #1d2f4b; /* Dark Grey Text */
+            border: none;
+            padding: 0.8rem 1.5rem;
+            border-radius: 5px;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        #stopButton:hover {
+            background-color: #66c4d8; /* Blue Button on Hover */
+        }
+    </style>
+</head>
+<body>
+    <img src="{{ url_for('static', filename='logos/ease_logo.png') }}" alt="E.A.S.E. Logo" class="logo">
+
+    <div id="transcript-container">
+        <div id="transcript"></div>
+    </div>
+    <div id="emotions"></div>
+    <div id="error"></div>
+
+    <button id="stopButton" onclick="stopConversation()">Stop Conversation</button>
+
+    <script type="text/javascript">
+        const socket = io();
+
+        socket.on('connect', function() {
+            console.log('Connected to server');
+        });
+
+        socket.on('update_transcript', function(msg) {
+            const transcriptDiv = document.getElementById('transcript');
+            transcriptDiv.innerHTML += msg.data + '<br>';
+            transcriptDiv.scrollTop = transcriptDiv.scrollHeight;
+        });
+
+        socket.on('update_emotions', function(msg) {
+            document.getElementById('emotions').innerText = 'Top Emotions: ' + msg.data;
+        });
+
+        socket.on('hume_error', function(msg) {
+            document.getElementById('error').innerText = 'Error: ' + msg.message;
+        });
+
+        socket.on('redirect', function(msg) {
+            window.location.href = msg.url;
+        });
+
+        function stopConversation() {
+            socket.emit('stop_conversation');
+        }
+    </script>
+</body>
+</html>

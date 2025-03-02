@@ -1,252 +1,218 @@
 import asyncio
 import base64
-import datetime
 import os
-import PySimpleGUI as sg
 import threading
 from dotenv import load_dotenv
+from flask import Flask, render_template, redirect, url_for, session
+from flask_socketio import SocketIO, emit
 from hume.client import AsyncHumeClient
-from hume.empathic_voice.chat.socket_client import ChatConnectOptions, ChatWebsocketConnection
-from hume.empathic_voice.chat.types import SubscribeEvent
-from hume.empathic_voice.types import UserInput
-from hume.core.api_error import ApiError
+from hume.empathic_voice.chat.socket_client import ChatConnectOptions
 from hume import MicrophoneInterface, Stream
 
-class EVIUI:
-    def __init__(self):
-        self.layout = [
-            [sg.Text("Transcription:", font=('Helvetica', 12))],
-            [sg.Multiline(size=(60, 10), key='-TRANSCRIPT-', autoscroll=True, disabled=True)],
-            [sg.Text("Top 3 Emotions:", font=('Helvetica', 12))],
-            [sg.Text("", size=(60, 1), key='-EMOTIONS-')]
-        ]
-        self.window = sg.Window("EVI Conversation", self.layout, finalize=True)
+# Initialize Flask and SocketIO
+app = Flask(__name__)
+app.config['SECRET_KEY'] = 'your_secret_key'  # Change this in production!
+socketio = SocketIO(app, async_mode='threading')
 
-    def update_transcript(self, text):
-        self.window['-TRANSCRIPT-'].print(text)
+# Load environment variables
+load_dotenv()
+HUME_API_KEY = os.getenv("HUME_API_KEY")
+HUME_SECRET_KEY = os.getenv("HUME_SECRET_KEY")
+HUME_CONFIG_ID = os.getenv("HUME_CONFIG_ID")
 
-    def update_emotions(self, emotions):
-        self.window['-EMOTIONS-'].update(emotions)
+# Global Variables
+hume_socket = None
+hume_connected = False
+main_loop = None
+microphone_task = None
+byte_strs = Stream.new()
 
-    def close(self):
-        self.window.close()
+# --- Utility Functions ---
+def extract_top_n_emotions(emotion_scores: dict, n: int) -> dict:
+    sorted_emotions = sorted(emotion_scores.items(), key=lambda item: item[1], reverse=True)
+    top_n_emotions = {emotion: score for emotion, score in sorted_emotions[:n]}
+    return top_n_emotions
 
-class WebSocketHandler:
-    """Handler for containing the EVI WebSocket and associated socket handling behavior."""
+# --- WebSocket Event Handlers ---
+@socketio.on('connect')
+def connect():
+    print('Client connected')
+    start_hume_connection()
 
-    def __init__(self, ui):
-        self.socket = None
-        self.byte_strs = Stream.new()
-        self.ui = ui
+@socketio.on('disconnect')
+def disconnect():
+    print('Client disconnected')
 
-    def set_socket(self, socket: ChatWebsocketConnection):
-        """Set the socket.
-        
-        This method assigns the provided asynchronous WebSocket connection
-        to the instance variable `self.socket`. It is invoked after successfully
-        establishing a connection using the client's connect method.
+@socketio.on('stop_conversation')
+def stop_conversation():
+    print('Conversation stopped by client')
+    stop_hume_connection()
+    emit('redirect', {'url': url_for('evaluation')})
 
-        Args:
-            socket (ChatWebsocketConnection): EVI asynchronous WebSocket returned by the client's connect method.
-        """
-        self.socket = socket
+# --- Hume API Integration ---
+async def hume_websocket_handler(message):
+    scores = {}
 
-    async def on_open(self):
-        """Logic invoked when the WebSocket connection is opened."""
-        print("WebSocket connection opened.")
+    if message.type in ["user_message", "assistant_message"]:
+        role = "E.A.S.E" if message.message.role.upper() == "ASSISTANT" else "You"
+        message_text = message.message.content
+        text = f"{role}: {message_text}"
+        socketio.emit('update_transcript', {'data': text})
 
-    async def on_message(self, message: SubscribeEvent):
-        """Callback function to handle a WebSocket message event.
-        
-        This asynchronous method decodes the message, determines its type, and 
-        handles it accordingly. Depending on the type of message, it 
-        might log metadata, handle user or assistant messages, process
-        audio data, raise an error if the message type is "error", and more.
+        if message.from_text is False and role == "You":
+            scores = dict(message.models.prosody.scores)
 
-        This method interacts with the following message types to demonstrate logging output to the terminal:
-        - [chat_metadata](https://dev.hume.ai/reference/empathic-voice-interface-evi/chat/chat#receive.Chat%20Metadata.type)
-        - [user_message](https://dev.hume.ai/reference/empathic-voice-interface-evi/chat/chat#receive.User%20Message.type)
-        - [assistant_message](https://dev.hume.ai/reference/empathic-voice-interface-evi/chat/chat#receive.Assistant%20Message.type)
-        - [audio_output](https://dev.hume.ai/reference/empathic-voice-interface-evi/chat/chat#receive.Audio%20Output.type)
+    elif message.type == "audio_output":
+        message_str: str = message.data
+        message_bytes = base64.b64decode(message_str.encode("utf-8"))
+        await byte_strs.put(message_bytes)
+        return
 
-        Args:
-            data (SubscribeEvent): This represents any type of message that is received through the EVI WebSocket, formatted in JSON. See the full list of messages in the API Reference [here](https://dev.hume.ai/reference/empathic-voice-interface-evi/chat/chat#receive).
-        """
+    elif message.type == "error":
+        error_message: str = message.message
+        print(f"Error from Hume API: {error_message}")
+        socketio.emit('hume_error', {'message': f"Hume API Error: {error_message}"})
+        return
 
-        # Create an empty dictionary to store expression inference scores
-        scores = {}
+    if scores:
+        top_3_emotions = extract_top_n_emotions(scores, 3)
+        emotion_text = ' | '.join([f"{emotion} ({score:.2f})" for emotion, score in top_3_emotions.items()])
+        socketio.emit('update_emotions', {'data': emotion_text})
 
-        if message.type == "chat_metadata":
-            message_type = message.type.upper()
-            chat_id = message.chat_id
-            chat_group_id = message.chat_group_id
-            text = f"<{message_type}> Chat ID: {chat_id}, Chat Group ID: {chat_group_id}"
-        elif message.type in ["user_message", "assistant_message"]:
-            role = message.message.role.upper()
-            message_text = message.message.content
-            text = f"{role}: {message_text}"
-            self.ui.update_transcript(text)
-            if message.from_text is False:
-                scores = dict(message.models.prosody.scores)
-        elif message.type == "audio_output":
-            message_str: str = message.data
-            message_bytes = base64.b64decode(message_str.encode("utf-8"))
-            await self.byte_strs.put(message_bytes)
-            return
-        elif message.type == "error":
-            error_message: str = message.message
-            error_code: str = message.code
-            raise ApiError(f"Error ({error_code}): {error_message}")
+async def hume_on_open():
+    global hume_connected
+    hume_connected = True
+    print("Hume WebSocket connection opened.")
+
+async def hume_on_close():
+    global hume_connected
+    hume_connected = False
+    print("Hume WebSocket connection closed.")
+
+async def hume_on_error(error):
+    global hume_connected
+    hume_connected = False
+    print(f"Hume WebSocket Error: {error}")
+    socketio.emit('hume_error', {'message': f"WebSocket Error: {error}"})
+
+async def hume_microphone_handler(socket):
+    global byte_strs
+    try:
+        await MicrophoneInterface.start(
+            socket,
+            allow_user_interrupt=False,
+            byte_stream=byte_strs
+        )
+        print("Microphone Started")
+    except asyncio.CancelledError:
+        print("Microphone task cancelled")
+    except RuntimeError as e:
+        if "anext(): asynchronous generator is already running" in str(e):
+            print("Microphone is already running, ignoring...")
         else:
-            message_type = message.type.upper()
-            text = f"<{message_type}>"
-        
-        # Print the formatted message
-        #self._print_prompt(text)
+            print(f"Error in microphone stream: {e}")
+            socketio.emit('hume_error', {'message': f"Microphone Error: {e}"})
+    except Exception as e:
+        print(f"Error in microphone stream: {e}")
+        socketio.emit('hume_error', {'message': f"Microphone Error: {e}"})
 
-        # Extract and print the top 3 emotions inferred from user and assistant expressions
-        if len(scores) > 0:
-            top_3_emotions = self._extract_top_n_emotions(scores, 3)
-            #self._print_emotion_scores(top_3_emotions)
-            emotion_text = ' | '.join([f"{emotion} ({score:.2f})" for emotion, score in top_3_emotions.items()])
-            self.ui.update_emotions(emotion_text+"\n")
-        else:
-            print("")
-        
-    async def on_close(self):
-        """Logic invoked when the WebSocket connection is closed."""
-        print("WebSocket connection closed.")
 
-    async def on_error(self, error):
-        """Logic invoked when an error occurs in the WebSocket connection.
-        
-        See the full list of errors [here](https://dev.hume.ai/docs/resources/errors).
+async def shutdown_microphone():
+    global microphone_task
+    if microphone_task:
+        try:
+            microphone_task.cancel()
+            await microphone_task
+        except asyncio.CancelledError:
+            pass
+    microphone_task = None
 
-        Args:
-            error (Exception): The error that occurred during the WebSocket communication.
-        """
-        print(f"Error: {error}")
+def start_hume_connection():
+    global hume_connected
+    if not hume_connected:
+        threading.Thread(target=run_hume_client, daemon=True).start()
 
-    # def _print_prompt(self, text: str) -> None:
-    #     """Print a formatted message with a timestamp.
+def stop_hume_connection():
+    global hume_socket, main_loop, hume_connected, microphone_task
+    hume_connected = False
 
-    #     Args:
-    #         text (str): The message text to be printed.
-    #     """
-    #     now = datetime.datetime.now(tz=datetime.timezone.utc)
-    #     now_str = now.strftime("%H:%M:%S")
-    #     print(f"[{now_str}] {text}")
+    if main_loop and main_loop.is_running():
+        for task in asyncio.all_tasks(main_loop):
+            task.cancel()
+        main_loop.call_soon_threadsafe(main_loop.stop)
+        asyncio.run_coroutine_threadsafe(shutdown_microphone(), main_loop)
 
-    def _extract_top_n_emotions(self, emotion_scores: dict, n: int) -> dict:
-        """
-        Extract the top N emotions based on confidence scores.
+    if hume_socket:
+        hume_socket = None
 
-        Args:
-            emotion_scores (dict): A dictionary of emotions and their corresponding confidence scores.
-            n (int): The number of top emotions to extract.
+    reset_global_variables()
 
-        Returns:
-            dict: A dictionary containing the top N emotions as keys and their raw scores as values.
-        """
-        # Convert the dictionary into a list of tuples and sort by the score in descending order
-        sorted_emotions = sorted(emotion_scores.items(), key=lambda item: item[1], reverse=True)
+def reset_global_variables():
+    global hume_socket, main_loop, microphone_task, byte_strs, hume_connected
+    hume_socket = None
+    hume_connected = False
+    if main_loop:
+        try:
+            main_loop.stop()
+            main_loop.close()
+        except:
+            pass
+    main_loop = None
+    microphone_task = None
+    byte_strs = Stream.new()  # Reset the byte stream
 
-        # Extract the top N emotions
-        top_n_emotions = {emotion: score for emotion, score in sorted_emotions[:n]}
+def run_hume_client():
+    global main_loop, hume_socket
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    main_loop = loop
+    loop.run_until_complete(hume_client_task())
+    loop.close()
+    hume_socket = None
 
-        return top_n_emotions
-
-    # def _print_emotion_scores(self, emotion_scores: dict) -> None:
-    #     """
-    #     Print the emotions and their scores in a formatted, single-line manner.
-
-    #     Args:
-    #         emotion_scores (dict): A dictionary of emotions and their corresponding confidence scores.
-    #     """
-    #     # Format the output string
-    #     formatted_emotions = ' | '.join([f"{emotion} ({score:.2f})" for emotion, score in emotion_scores.items()])
-        
-    #     # Print the formatted string
-    #     print(f"|{formatted_emotions}|")
-    
-
-async def sending_handler(socket: ChatWebsocketConnection):
-    """Handle sending a message over the socket.
-
-    This method waits 3 seconds and sends a UserInput message, which takes a `text` parameter as input.
-    - https://dev.hume.ai/reference/empathic-voice-interface-evi/chat/chat#send.User%20Input.type
-    
-    See the full list of messages to send [here](https://dev.hume.ai/reference/empathic-voice-interface-evi/chat/chat#send).
-
-    Args:
-        socket (ChatWebsocketConnection): The WebSocket connection used to send messages.
-    """
-    # Wait 3 seconds before executing the rest of the method
-    await asyncio.sleep(3)
-
-    # Construct a user input message
-    # user_input_message = UserInput(text="Hello there!")
-
-    # Send the user input as text to the socket
-    # await socket.send_user_input(user_input_message)
-
-async def main() -> None:
-    # Retrieve any environment variables stored in the .env file
-    load_dotenv()
-
-    # Retrieve the API key, Secret key, and EVI config id from the environment variables
-    HUME_API_KEY = os.getenv("HUME_API_KEY")
-    HUME_SECRET_KEY = os.getenv("HUME_SECRET_KEY")
-    HUME_CONFIG_ID = os.getenv("HUME_CONFIG_ID")
-
-    # Initialize the asynchronous client, authenticating with your API key
+async def hume_client_task():
+    global hume_socket, hume_connected, microphone_task
     client = AsyncHumeClient(api_key=HUME_API_KEY)
-
-    # Define options for the WebSocket connection, such as an EVI config id and a secret key for token authentication
-    # See the full list of query parameters here: https://dev.hume.ai/reference/empathic-voice-interface-evi/chat/chat#request.query
     options = ChatConnectOptions(config_id=HUME_CONFIG_ID, secret_key=HUME_SECRET_KEY)
 
-    # Instantiate the WebSocketHandler
-    ui = EVIUI()
-    websocket_handler = WebSocketHandler(ui)
+    try:
+        async with client.empathic_voice.chat.connect_with_callbacks(
+            options=options,
+            on_open=hume_on_open,
+            on_message=hume_websocket_handler,
+            on_close=hume_on_close,
+            on_error=hume_on_error
+        ) as socket:
+            hume_socket = socket
+            hume_connected = True
+            print("Hume client connected.")
+            microphone_task = asyncio.create_task(hume_microphone_handler(socket))
+            await asyncio.Future()  # Keep the connection open indefinitely
+    except Exception as e:
+        hume_connected = False
+        print(f"Error connecting to Hume: {e}")
+        socketio.emit('hume_error', {'message': f"Hume Connection Error: {e}"})
 
-    async def run_gui():
-        while True:
-            event, values = ui.window.read(timeout=100)
-            if event == sg.WINDOW_CLOSED:
-                break
-            await asyncio.sleep(0.1)
-        ui.close()
+# --- Flask Routes ---
+@app.route('/')
+def welcome():
+    return render_template('welcome.html')
 
-    gui_task = asyncio.create_task(run_gui())
+@app.route('/evaluation')
+def evaluation():
+    return render_template('evaluation.html')
 
-    # Open the WebSocket connection with the configuration options and the handler's functions
-    async with client.empathic_voice.chat.connect_with_callbacks(
-        options=options,
-        on_open=websocket_handler.on_open,
-        on_message=websocket_handler.on_message,
-        on_close=websocket_handler.on_close,
-        on_error=websocket_handler.on_error
-    ) as socket:
+@app.route('/new_conversation')
+def new_conversation():
+    session.clear()  # Clears Flask session variables
+    stop_hume_connection()  # Stop the current Hume connection
+    start_hume_connection()  # Start a new Hume connection
+    return redirect(url_for('chat'))  # Redirect to the chat page
 
-        # Set the socket instance in the handler
-        websocket_handler.set_socket(socket)
+@app.route('/chat')
+def chat():
+    return render_template('index.html')  # Your existing chat page
 
-        # Create an asynchronous task to continuously detect and process input from the microphone, as well as play audio
-        microphone_task = asyncio.create_task(
-            MicrophoneInterface.start(
-                socket,
-                allow_user_interrupt=False,
-                byte_stream=websocket_handler.byte_strs
-            )
-        )
-        
-        # Create an asynchronous task to send messages over the WebSocket connection
-        message_sending_task = asyncio.create_task(sending_handler(socket))
-        
-        # Schedule the coroutines to occur simultaneously
-        await asyncio.gather(microphone_task, message_sending_task, gui_task)
-
-# Execute the main asynchronous function using asyncio's event loop
-if __name__ == "__main__":
-    asyncio.run(main())
+# --- Main ---
+if __name__ == '__main__':
+    socketio.run(app, debug=True)
