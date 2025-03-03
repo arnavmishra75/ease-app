@@ -1,3 +1,4 @@
 .env*.local
 .env
-evi-env
+evi-env/
+__pycache__/
