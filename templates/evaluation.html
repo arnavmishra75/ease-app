@@ -8,44 +8,56 @@
     <style>
         body {
             font-family: 'Roboto', sans-serif;
-            background-color: #ffffff; /* White Background */
-            color: #1d2f4b; /* Dark Grey Text */
+            background-color: #ffffff;
+            color: #1d2f4b;
             display: flex;
             justify-content: center;
             align-items: center;
             height: 100vh;
             margin: 0;
+            background: linear-gradient(to bottom, #ffffff, #66c4d8); /* Gradient Background */
         }
         .container {
             text-align: center;
-            background-color: #66c4d8; /* Blue Container */
+            background-color: #ffffff;
             padding: 2rem;
             border-radius: 10px;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            animation: fadeIn 1s ease-out; /* Fade-in animation */
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
         }
         .logo {
             max-width: 200px;
             height: auto;
             margin-bottom: 1rem;
+            animation: pulse 2s infinite alternate; /* Pulse animation */
+        }
+        @keyframes pulse {
+            from { transform: scale(1); }
+            to { transform: scale(1.05); }
         }
         p {
             font-size: 1.2rem;
             margin-bottom: 1.5rem;
-            color: #1d2f4b; /* Dark Grey Text */
+            color: #1d2f4b;
         }
         .btn {
             display: inline-block;
-            background-color: #84d8b7; /* Green Button */
-            color: #1d2f4b; /* Dark Grey Text */
+            background-color: #84d8b7;
+            color: #1d2f4b;
             text-decoration: none;
             padding: 0.8rem 1.5rem;
             border-radius: 5px;
             font-weight: bold;
-            transition: background-color 0.3s ease;
+            transition: background-color 0.3s ease, transform 0.2s ease;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
         .btn:hover {
-            background-color: #1d2f4b; /* Dark Grey Button on Hover */
-            color: #fff;
+            background-color: #66c4d8; /* Changed to the same hover color as the other buttons */
+            transform: translateY(-3px); /* Lift effect on hover */
         }
     </style>
 </head>

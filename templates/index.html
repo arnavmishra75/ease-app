@@ -9,49 +9,55 @@
     <style>
         body {
             font-family: 'Roboto', sans-serif;
-            background-color: #ffffff; /* White Background */
-            color: #1d2f4b; /* Dark Grey Text */
+            background-color: #ffffff;
+            color: #1d2f4b;
             display: flex;
             flex-direction: column;
             align-items: center;
             min-height: 100vh;
             margin: 0;
             padding: 2rem;
+            text-align: center;
+            background: linear-gradient(to bottom, #ffffff, #66c4d8); /* Gradient Background */
         }
         .logo {
             max-width: 200px;
             height: auto;
             margin-bottom: 1.5rem;
+            animation: pulse 2s infinite alternate; /* Pulse animation */
+        }
+        @keyframes pulse {
+            from { transform: scale(1); }
+            to { transform: scale(1.05); }
         }
         #transcript-container {
             width: 80%;
             max-width: 600px;
-            background-color: #66c4d8; /* Blue Container */
+            background-color: #66c4d8;
             border-radius: 10px;
             padding: 1rem;
             margin-bottom: 1.5rem;
+            text-align: left;
+            box-sizing: border-box;
         }
         #transcript {
             width: 100%;
             height: 300px;
             border: none;
-            background-color: #ffffff; /* White Background */
-            color: #1d2f4b; /* Dark Grey Text */
+            background-color: #ffffff;
+            color: #1d2f4b;
             padding: 1rem;
             margin-bottom: 1rem;
             overflow-y: scroll;
             border-radius: 5px;
             font-size: 0.9rem;
-            line-height: 1.4; /* Improve readability */
+            line-height: 1.6;
+            white-space: pre-wrap;
+            box-sizing: border-box;
         }
-        #emotions {
-            background-color: #84d8b7; /* Green Container */
-            color: #1d2f4b; /* Dark Grey Text */
-            padding: 0.8rem;
-            border-radius: 5px;
+        #emotion-chart {
+            max-width: 500px;
             margin-bottom: 1rem;
-            font-weight: bold;
-            text-align: center;
         }
         #error {
             color: #ff6b6b;
@@ -60,18 +66,20 @@
             text-align: center;
         }
         #stopButton {
-            background-color: #84d8b7; /* Green Button */
-            color: #1d2f4b; /* Dark Grey Text */
+            background-color: #84d8b7;
+            color: #1d2f4b;
             border: none;
             padding: 0.8rem 1.5rem;
             border-radius: 5px;
             font-size: 1rem;
             font-weight: bold;
             cursor: pointer;
-            transition: background-color 0.3s ease;
+            transition: background-color 0.3s ease, transform 0.2s ease;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
         #stopButton:hover {
-            background-color: #66c4d8; /* Blue Button on Hover */
+            background-color: #66c4d8;
+            transform: translateY(-3px); /* Lift effect on hover */
         }
     </style>
 </head>
@@ -81,13 +89,16 @@
     <div id="transcript-container">
         <div id="transcript"></div>
     </div>
-    <div id="emotions"></div>
+
+    <img id="emotion-chart" src="" alt="Emotion Chart" style="display: none;">
+
     <div id="error"></div>
 
     <button id="stopButton" onclick="stopConversation()">Stop Conversation</button>
 
     <script type="text/javascript">
         const socket = io();
+        const emotionChart = document.getElementById('emotion-chart');
 
         socket.on('connect', function() {
             console.log('Connected to server');
@@ -99,8 +110,9 @@
             transcriptDiv.scrollTop = transcriptDiv.scrollHeight;
         });
 
-        socket.on('update_emotions', function(msg) {
-            document.getElementById('emotions').innerText = 'Top Emotions: ' + msg.data;
+       socket.on('update_emotions', function(msg) {
+            emotionChart.src = msg.image;
+            emotionChart.style.display = 'block'; // Show the image when data is available
         });
 
         socket.on('hume_error', function(msg) {

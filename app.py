@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import io
 import os
 import threading
 from dotenv import load_dotenv
@@ -8,6 +9,10 @@ from flask_socketio import SocketIO, emit
 from hume.client import AsyncHumeClient
 from hume.empathic_voice.chat.socket_client import ChatConnectOptions
 from hume import MicrophoneInterface, Stream
+import matplotlib
+matplotlib.use('Agg')  # Use the Agg backend
+import matplotlib.pyplot as plt
+import numpy as np
 
 # Initialize Flask and SocketIO
 app = Flask(__name__)
@@ -28,10 +33,47 @@ microphone_task = None
 byte_strs = Stream.new()
 
 # --- Utility Functions ---
+
 def extract_top_n_emotions(emotion_scores: dict, n: int) -> dict:
+    """Extracts the top N emotions from the emotion scores."""
     sorted_emotions = sorted(emotion_scores.items(), key=lambda item: item[1], reverse=True)
-    top_n_emotions = {emotion: score for emotion, score in sorted_emotions[:n]}
+    top_n_emotions = dict(sorted_emotions[:n])
     return top_n_emotions
+
+
+def create_emotion_bar_chart(emotion_scores: dict):
+    """Generates a bar chart of emotion scores and returns it as a base64 encoded string."""
+    try:
+        top_3_emotions = extract_top_n_emotions(emotion_scores, 3)
+        emotions = list(top_3_emotions.keys())
+        scores = list(top_3_emotions.values())
+
+        # Create the bar chart
+        plt.figure(figsize=(8, 4))
+        bars = plt.bar(emotions, scores, color='#84d8b7')  # Using your green color
+        plt.xlabel('Emotions')
+        plt.ylabel('Scores')
+        plt.title('Top 3 Emotion Analysis')
+        plt.ylim(0, max(scores) + 0.1)  # Adjust y-axis limit to make space for value labels
+        plt.xticks(rotation=45, ha='right')  # Rotate emotion labels for readability
+        plt.tight_layout()
+
+        # Add value labels above the bars
+        for bar in bars:
+            yval = bar.get_height()
+            plt.text(bar.get_x() + bar.get_width()/2, yval, round(yval, 2), ha='center', va='bottom')
+
+        # Save the plot to a BytesIO object
+        img = io.BytesIO()
+        plt.savefig(img, format='png')
+        img.seek(0)
+        plt.close()  # Close the plot to free memory
+
+        # Encode as base64
+        return base64.b64encode(img.read()).decode()
+    except Exception as e:
+        print(f"Error creating emotion chart: {e}")
+        return None
 
 # --- WebSocket Event Handlers ---
 @socketio.on('connect')
@@ -56,6 +98,10 @@ async def hume_websocket_handler(message):
     if message.type in ["user_message", "assistant_message"]:
         role = "E.A.S.E" if message.message.role.upper() == "ASSISTANT" else "You"
         message_text = message.message.content
+        ease_vars = ["ease", "ease.", "ease?", "ease!", "ease,"]
+        for var in ease_vars:
+            if var in message_text.lower():
+                message_text = message_text.replace(var, "E.A.S.E")
         text = f"{role}: {message_text}"
         socketio.emit('update_transcript', {'data': text})
 
@@ -75,9 +121,12 @@ async def hume_websocket_handler(message):
         return
 
     if scores:
-        top_3_emotions = extract_top_n_emotions(scores, 3)
-        emotion_text = ' | '.join([f"{emotion} ({score:.2f})" for emotion, score in top_3_emotions.items()])
-        socketio.emit('update_emotions', {'data': emotion_text})
+        # Generate the emotion bar chart
+        img_data = create_emotion_bar_chart(scores)
+        if img_data:
+            socketio.emit('update_emotions', {'image': f'data:image/png;base64,{img_data}'})
+        else:
+            socketio.emit('hume_error', {'message': "Failed to create emotion chart"})
 
 async def hume_on_open():
     global hume_connected

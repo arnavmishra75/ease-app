@@ -8,44 +8,92 @@
     <style>
         body {
             font-family: 'Roboto', sans-serif;
-            background-color: #ffffff; /* White Background */
-            color: #1d2f4b; /* Dark Grey Text */
+            background-color: #ffffff;
+            color: #1d2f4b;
             display: flex;
             justify-content: center;
             align-items: center;
             height: 100vh;
             margin: 0;
+            background: linear-gradient(to bottom, #ffffff, #66c4d8);
         }
         .container {
             text-align: center;
-            background-color: #66c4d8; /* Blue Container */
-            padding: 2rem;
+            padding: 3rem;
+            border-radius: 15px;
+            background-color: rgba(255, 255, 255, 0.8);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+            animation: fadeIn 1s ease-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .logo-container {
+            background-color: #ffffff;
+            padding: 20px;
             border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            display: inline-block;
+            margin-bottom: 1rem;
         }
         .logo {
             max-width: 200px;
             height: auto;
-            margin-bottom: 1rem;
+            display: block;
+            margin-left: auto;
+            margin-right: auto;
+            animation: pulse 2s infinite alternate;
+        }
+        @keyframes pulse {
+            from { transform: scale(1); }
+            to { transform: scale(1.05); }
+        }
+        .subheader {
+            font-size: 1.2rem;
+            color: #1d2f4b;
+            margin-bottom: 2rem;
+            padding: 0 2rem;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1);
+            overflow: hidden; /* Ensures the text is hidden initially */
+            white-space: nowrap; /* Prevents the text from wrapping */
+            border-right: .05em solid #1d2f4b; /* The typewriter cursor */
+            animation: 
+                typing 4s steps(60, end) forwards,
+                blink-caret .75s step-end infinite;
+        }
+        /* Typing animation */
+        @keyframes typing {
+            from { width: 0 }
+            to { width: 100% }
+        }
+        /* Cursor blinking animation */
+        @keyframes blink-caret {
+            from, to { border-color: transparent }
+            50% { border-color: #1d2f4b; }
         }
         .btn {
             display: inline-block;
-            background-color: #84d8b7; /* Green Button */
-            color: #1d2f4b; /* Dark Grey Text */
+            background-color: #84d8b7;
+            color: #1d2f4b;
             text-decoration: none;
-            padding: 0.8rem 1.5rem;
-            border-radius: 5px;
+            padding: 1rem 2rem;
+            border-radius: 7px;
             font-weight: bold;
-            transition: background-color 0.3s ease;
+            transition: background-color 0.3s ease, transform 0.2s ease;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
         .btn:hover {
-            background-color: #66c4d8; /* Blue Button on Hover */
+            background-color: #66c4d8;
+            transform: translateY(-3px);
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <img src="{{ url_for('static', filename='/logos/ease_logo.png') }}" alt="E.A.S.E. Logo" class="logo">
+        <div class="logo-container">
+            <img src="{{ url_for('static', filename='/logos/ease_logo.png') }}" alt="E.A.S.E. Logo" class="logo">
+        </div>
+        <div class="subheader">E.A.S.E (Empathy AI for Stressful Encounters): Your AI Guide to Defuse High Stress Talks with Empathy and Confidence.</div>
         <a href="{{ url_for('chat') }}" class="btn">Start Chat</a>
     </div>
 </body>

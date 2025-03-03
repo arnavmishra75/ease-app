@@ -1,4 +1,4 @@
 hume
 "hume[microphone]"
 python-dotenv
-PySimpleGUI
+matplotlib
