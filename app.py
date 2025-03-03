@@ -32,6 +32,7 @@ hume_connected = False
 main_loop = None
 microphone_task = None
 byte_strs = Stream.new()
+filler_word_count = 0  # Initialize filler word counter
 
 # --- Utility Functions ---
 
@@ -86,6 +87,8 @@ def create_emotion_bar_chart(emotion_scores: dict):
 def connect():
     print('Client connected')
     start_hume_connection()
+    global filler_word_count
+    filler_word_count = 0
 
 @socketio.on('disconnect')
 def disconnect():
@@ -99,20 +102,31 @@ def stop_conversation():
 
 # --- Hume API Integration ---
 async def hume_websocket_handler(message):
+    global filler_word_count
     scores = {}
+    filler_words = ["like", "well", "so", "um", "ah", "er", "you know", "i mean"]
 
     if message.type in ["user_message", "assistant_message"]:
         role = "E.A.S.E" if message.message.role.upper() == "ASSISTANT" else "You"
         message_text = message.message.content
-        ease_vars = ["ease", "ease.", "ease?", "ease!", "ease,"]
+        
+        # Replace "ease" variations with "E.A.S.E"
+        ease_vars = ["ease", "ease.", "ease?", "ease!", "ease,", "Ease", "Ease.", "Ease?", "Ease!", "Ease,"]
         for var in ease_vars:
-            if var in message_text.lower():
-                message_text = message_text.replace(var, "E.A.S.E")
+            message_text = message_text.replace(var, "E.A.S.E")
+        
+        # Count filler words (only for user messages)
+        if role == "You":
+            words = message_text.lower().split()
+            filler_word_count += sum(1 for word in words if word in filler_words)
+
         text = f"{role}: {message_text}"
         socketio.emit('update_transcript', {'data': text})
+        socketio.emit('update_filler_count', {'count': filler_word_count})
 
         if message.from_text is False and role == "You":
             scores = dict(message.models.prosody.scores)
+            print(scores.keys())
 
     elif message.type == "audio_output":
         message_str: str = message.data
@@ -203,7 +217,7 @@ def stop_hume_connection():
     reset_global_variables()
 
 def reset_global_variables():
-    global hume_socket, main_loop, microphone_task, byte_strs, hume_connected
+    global hume_socket, main_loop, microphone_task, byte_strs, hume_connected, filler_word_count
     hume_socket = None
     hume_connected = False
     if main_loop:
@@ -215,6 +229,7 @@ def reset_global_variables():
     main_loop = None
     microphone_task = None
     byte_strs = Stream.new()  # Reset the byte stream
+    filler_word_count = 0 # Reset filler word count
 
 def run_hume_client():
     global main_loop, hume_socket

@@ -36,7 +36,7 @@
             background-color: #66c4d8;
             border-radius: 10px;
             padding: 1rem;
-            margin-bottom: 1.5rem;
+            margin-bottom: 0.5rem;
             text-align: left;
             box-sizing: border-box;
         }
@@ -55,13 +55,63 @@
             white-space: pre-wrap;
             box-sizing: border-box;
         }
+        .chart-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            max-width: 800px;
+            margin-bottom: 1rem;
+        }
         #emotion-chart {
             max-width: 500px;
-            margin-bottom: 1rem;
+            flex: 2; /* Take up more space */
+            transition: opacity 0.5s ease; /* Fade-in effect */
+        }
+        .filler-count-container {
+            width: 150px;
+            height: 150px;
+            border-radius: 50%;
+            background-color: #d3f0e4; /* Very light shade of green */
+            color: #1d2f4b; /* Dark Grey Text */
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            flex: 1; /* Take up less space */
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            opacity: 0; /* Initially hidden */
+            transition: opacity 0.5s ease, transform 0.3s ease; /* Fade-in and scale effect */
+            border: 3px solid #a8e6cf; /* Add a subtle border */
+        }
+        .filler-count-container.show {
+            opacity: 1;
+        }
+         .filler-count-container:hover {
+            transform: scale(1.05); /* Slight scale-up on hover */
+        }
+         .filler-count-header {
+            margin-bottom: 0.1rem;
+            font-weight: bold;
+            font-size: 0.8rem; /* Smaller title size */
+            color: #1d2f4b;
+        }
+        .filler-count {
+            font-size: 2.5rem; /* Larger number */
+            font-weight: bold;
+            transition: transform 0.3s ease; /* Scale animation for count changes */
+        }
+        @keyframes count-change {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); }
+        }
+        .count-changing {
+            animation: count-change 0.5s ease;
         }
         #error {
             color: #ff6b6b;
-            margin-bottom: 1rem;
+            margin-bottom: 0.5rem;
             font-weight: bold;
             text-align: center;
         }
@@ -90,15 +140,24 @@
         <div id="transcript"></div>
     </div>
 
-    <img id="emotion-chart" src="" alt="Emotion Chart" style="display: none;">
+    <div class="chart-container">
+        <img id="emotion-chart" src="" alt="Emotion Chart" style="display: none;">
+        <div class="filler-count-container">
+            <p class="filler-count-header">Current Filler Words Usage</p>
+            <span class="filler-count" id="filler-count">0</span>
+        </div>
+    </div>
 
     <div id="error"></div>
 
-    <button id="stopButton" onclick="stopConversation()">Stop Conversation</button>
+    <button id="stopButton" onclick="stopConversation()">Stop Conversation()">Stop Conversation</button>
 
     <script type="text/javascript">
         const socket = io();
         const emotionChart = document.getElementById('emotion-chart');
+        const fillerCountContainer = document.querySelector('.filler-count-container');
+        const fillerCount = document.getElementById('filler-count');
+        let chartVisible = false;
 
         socket.on('connect', function() {
             console.log('Connected to server');
@@ -110,9 +169,16 @@
             transcriptDiv.scrollTop = transcriptDiv.scrollHeight;
         });
 
-       socket.on('update_emotions', function(msg) {
+        socket.on('update_filler_count', function(msg) {
+             if (!chartVisible) return;  // Don't update if chart is not visible
+            animateValueChange(fillerCount, msg.count);
+        });
+
+        socket.on('update_emotions', function(msg) {
             emotionChart.src = msg.image;
-            emotionChart.style.display = 'block'; // Show the image when data is available
+            emotionChart.style.display = 'block';
+            fillerCountContainer.classList.add('show');  // Show the filler count
+            chartVisible = true;
         });
 
         socket.on('hume_error', function(msg) {
@@ -125,6 +191,22 @@
 
         function stopConversation() {
             socket.emit('stop_conversation');
+        }
+
+         function animateValueChange(element, newValue) {
+            const currentValue = parseInt(element.innerText);
+
+            if (newValue > currentValue) {
+                element.classList.add('count-changing');
+                 element.innerText = newValue;
+
+                setTimeout(() => {
+                    element.classList.remove('count-changing');
+                }, 500);
+            }
+            else{
+                 element.innerText = newValue;
+            }
         }
     </script>
 </body>

@@ -56,9 +56,9 @@
             text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1);
             overflow: hidden; /* Ensures the text is hidden initially */
             white-space: nowrap; /* Prevents the text from wrapping */
-            border-right: .05em solid #1d2f4b; /* The typewriter cursor */
+            border-right: .05em solid transparent; /* The typewriter cursor, transparent initially */
             animation: 
-                typing 4s steps(60, end) forwards,
+                typing 2s steps(60, end) forwards, /* Reduced from 4s to 2s */
                 blink-caret .75s step-end infinite;
         }
         /* Typing animation */
@@ -70,6 +70,12 @@
         @keyframes blink-caret {
             from, to { border-color: transparent }
             50% { border-color: #1d2f4b; }
+        }
+         /* Hide cursor after typing */
+        .subheader:not(:focus)::after {
+            content: '';
+            border: none;
+            animation: none;
         }
         .btn {
             display: inline-block;
