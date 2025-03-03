@@ -10,7 +10,6 @@ from hume.client import AsyncHumeClient
 from hume.empathic_voice.chat.socket_client import ChatConnectOptions
 from hume import MicrophoneInterface, Stream
 import matplotlib
-matplotlib.use('Agg')  # Use the Agg backend
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import font_manager
@@ -21,6 +20,7 @@ import re
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your_secret_key'  # change later
 socketio = SocketIO(app, async_mode='threading')
+matplotlib.use('Agg')  # use agg so that charts aren't rendered immediately (instead saved)
 
 # Load environment variables
 load_dotenv()
