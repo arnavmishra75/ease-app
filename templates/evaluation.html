@@ -16,7 +16,7 @@
             align-items: center;
             min-height: 100vh;
             margin: 0;
-            background: linear-gradient(to bottom, #ffffff, #66c4d8);
+            background: linear-gradient(to bottom, #ffffff, #66c4d8); /* Gradient Background */
         }
 
         .container {
@@ -25,19 +25,9 @@
             padding: 2rem;
             border-radius: 10px;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            animation: fadeIn 1s ease-out;
-        }
-
-        @keyframes fadeIn {
-            from {
-                opacity: 0;
-                transform: translateY(-20px);
-            }
-
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
+            width: 80%; /* Set container width to 80% */
+            margin-top: 2rem; /* Add some space at the top */
+            margin-bottom: 2rem;
         }
 
         .logo {
@@ -57,12 +47,6 @@
             }
         }
 
-        h2 {
-            font-size: 1.5rem;
-            margin-bottom: 1rem;
-            color: #1d2f4b;
-        }
-
         p {
             font-size: 1.2rem;
             margin-bottom: 1.5rem;
@@ -73,11 +57,17 @@
             display: flex;
             justify-content: space-around;
             width: 100%;
-            margin-bottom: 2rem;
+            margin-bottom: 1rem; /* Reduce margin */
         }
 
         .chart {
             width: 45%; /* Adjust as needed */
+        }
+
+        .chart img {
+            max-height: 180px; /* Further reduce max height */
+            width: 100%; /* Make images take up the full width of their containers */
+            object-fit: contain; /* Maintain aspect ratio */
         }
 
         .btn {
@@ -96,27 +86,41 @@
             background-color: #66c4d8;
             transform: translateY(-3px);
         }
+
+        div:last-child img {
+            max-height: 250px; /* slightly increase the max-height of bottom graph*/
+        }
+
+        /* Ensure full gradient border */
+        body::before {
+            content: "";
+            position: fixed;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            left: 0;
+            z-index: -1; /* Place behind content */
+            margin: -1px; /* Cover the 1px border */
+            border-radius: inherit; /* Optional: if you have a rounded container */
+            background: linear-gradient(to bottom, #ffffff, #66c4d8);
+        }
     </style>
 </head>
 <body>
 <div class="container">
     <img src="{{ url_for('static', filename='logos/ease_logo.png') }}" alt="E.A.S.E. Logo" class="logo">
-    <h2>Evaluation</h2>
-    <p>Here's a summary of your conversation:</p>
+    <p><b>Summary Statistics of your Conversation:</b></p>
 
     <div class="chart-container">
         <div class="chart">
-            <h3>Positive Emotion Trends</h3>
             <img src="data:image/png;base64,{{ positive_emotion_chart }}" alt="Positive Emotion Chart">
         </div>
         <div class="chart">
-            <h3>Negative Emotion Trends</h3>
             <img src="data:image/png;base64,{{ negative_emotion_chart }}" alt="Negative Emotion Chart">
         </div>
     </div>
 
     <div>
-        <h3>Top 5 Average Emotions</h3>
         <img src="data:image/png;base64,{{ top_emotions_chart }}" alt="Top Emotions Chart">
     </div>
 

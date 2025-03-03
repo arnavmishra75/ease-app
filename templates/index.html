@@ -16,30 +16,47 @@
             align-items: center;
             min-height: 100vh;
             margin: 0;
-            padding: 2rem;
-            text-align: center;
             background: linear-gradient(to bottom, #ffffff, #66c4d8); /* Gradient Background */
         }
+
+        .container {
+            text-align: center;
+            background-color: #ffffff;
+            padding: 2rem;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            width: 80%; /* Set container width to 80% */
+            margin-top: 2rem; /* Add some space at the top */
+            margin-bottom: 2rem;
+        }
+
         .logo {
             max-width: 200px;
             height: auto;
             margin-bottom: 1.5rem;
             animation: pulse 2s infinite alternate; /* Pulse animation */
         }
+
         @keyframes pulse {
-            from { transform: scale(1); }
-            to { transform: scale(1.05); }
+            from {
+                transform: scale(1);
+            }
+
+            to {
+                transform: scale(1.05);
+            }
         }
+
         #transcript-container {
-            width: 80%;
-            max-width: 600px;
-            background-color: #66c4d8;
+            width: 100%; /* Take full width of the container */
+            /* background-color: #66c4d8; */ /* REMOVE BLUE BOX */
             border-radius: 10px;
             padding: 1rem;
             margin-bottom: 0.5rem;
             text-align: left;
             box-sizing: border-box;
         }
+
         #transcript {
             width: 100%;
             height: 300px;
@@ -54,24 +71,27 @@
             line-height: 1.6;
             white-space: pre-wrap;
             box-sizing: border-box;
+            border: 5px solid #66c4d8; /* add the border to transcript section instead */
         }
+
         .chart-container {
             display: flex;
-            justify-content: center;
+            justify-content: center; /* Center items horizontally */
             align-items: center;
             width: 100%;
-            max-width: 800px;
             margin-bottom: 2rem; /* Increased margin */
         }
+
         #emotion-chart {
             max-width: 500px;
             flex: 2; /* Take up more space */
             transition: opacity 0.5s ease; /* Fade-in effect */
             padding-right: 20px; /* Add padding */
         }
+
         .filler-count-container {
-            width: 150px;
-            height: 150px;
+            width: 120px;  /* Reduced size */
+            height: 120px; /* Reduced size */
             border-radius: 50%;
             background-color: #d3f0e4; /* Very light shade of green */
             color: #1d2f4b; /* Dark Grey Text */
@@ -85,41 +105,58 @@
             transition: opacity 0.5s ease, transform 0.3s ease; /* Fade-in and scale effect */
             margin-left: 20px; /* Add margin */
         }
+
         .filler-count-container.show {
             opacity: 1;
         }
-         .filler-count-container:hover {
+
+        .filler-count-container:hover {
             transform: scale(1.05); /* Slight scale-up on hover */
         }
-         .filler-count-header {
+
+        .filler-count-header {
             margin-bottom: 0.1rem;
             font-weight: bold;
-            font-size: 0.8rem; /* Smaller title size */
+            font-size: 0.7rem; /* Even smaller title size */
             color: #1d2f4b;
             text-align: center;
         }
-         .filler-count-header .usage-color {
+
+        .filler-count-header .usage-color {
             color: #84d8b7; /* Green color for "Usage" */
         }
+
         .filler-count {
-            font-size: 2.5rem; /* Larger number */
+            font-size: 2rem; /* Even smaller number */
             font-weight: bold;
             transition: transform 0.3s ease; /* Scale animation for count changes */
         }
+
         @keyframes count-change {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.2); }
-            100% { transform: scale(1); }
+            0% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.2);
+            }
+
+            100% {
+                transform: scale(1);
+            }
         }
+
         .count-changing {
             animation: count-change 0.5s ease;
         }
+
         #error {
             color: #ff6b6b;
             margin-bottom: 0.5rem;
             font-weight: bold;
             text-align: center;
         }
+
         #stopButton {
             background-color: #84d8b7;
             color: #1d2f4b;
@@ -132,6 +169,7 @@
             transition: background-color 0.3s ease, transform 0.2s ease;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
+
         #stopButton:hover {
             background-color: #66c4d8;
             transform: translateY(-3px); /* Lift effect on hover */
@@ -139,6 +177,7 @@
     </style>
 </head>
 <body>
+<div class="container">
     <img src="{{ url_for('static', filename='logos/ease_logo.png') }}" alt="E.A.S.E. Logo" class="logo">
 
     <div id="transcript-container">
@@ -156,65 +195,66 @@
     <div id="error"></div>
 
     <button id="stopButton" onclick="stopConversation()">Stop Conversation</button>
+</div>
 
-    <script type="text/javascript">
-        const socket = io();
-        const emotionChart = document.getElementById('emotion-chart');
-        const fillerCountContainer = document.querySelector('.filler-count-container');
-        const fillerCount = document.getElementById('filler-count');
-        let chartVisible = false;
+<script type="text/javascript">
+    const socket = io();
+    const emotionChart = document.getElementById('emotion-chart');
+    const fillerCountContainer = document.querySelector('.filler-count-container');
+    const fillerCount = document.getElementById('filler-count');
+    let chartVisible = false;
 
-        socket.on('connect', function() {
-            console.log('Connected to server');
-        });
+    socket.on('connect', function() {
+        console.log('Connected to server');
+    });
 
-        socket.on('update_transcript', function(msg) {
-            const transcriptDiv = document.getElementById('transcript');
-            // Bold role names
-            const formattedText = msg.data.replace(/(E\.A\.S\.E|You):/g, '<strong>$1:<\/strong>');
-            transcriptDiv.innerHTML += formattedText + '<br><br>'; // Add line break space
-            transcriptDiv.scrollTop = transcriptDiv.scrollHeight;
-        });
+    socket.on('update_transcript', function(msg) {
+        const transcriptDiv = document.getElementById('transcript');
+        // Bold role names
+        const formattedText = msg.data.replace(/(E\.A\.S\.E|You):/g, '<strong>$1:<\/strong>');
+        transcriptDiv.innerHTML += formattedText + '<br><br>'; // Add line break space
+        transcriptDiv.scrollTop = transcriptDiv.scrollHeight;
+    });
 
-        socket.on('update_filler_count', function(msg) {
-             if (!chartVisible) return;  // Don't update if chart is not visible
-            animateValueChange(fillerCount, msg.count);
-        });
+    socket.on('update_filler_count', function(msg) {
+        if (!chartVisible) return; // Don't update if chart is not visible
+        animateValueChange(fillerCount, msg.count);
+    });
 
-        socket.on('update_emotions', function(msg) {
-            emotionChart.src = msg.image;
-            emotionChart.style.display = 'block';
-            fillerCountContainer.classList.add('show');  // Show the filler count
-            chartVisible = true;
-        });
+    socket.on('update_emotions', function(msg) {
+        emotionChart.src = msg.image;
+        emotionChart.style.display = 'block';
+        fillerCountContainer.classList.add('show'); // Show the filler count
+        chartVisible = true;
+    });
 
-        socket.on('hume_error', function(msg) {
-            document.getElementById('error').innerText = 'Error: ' + msg.message;
-        });
+    socket.on('hume_error', function(msg) {
+        document.getElementById('error').innerText = 'Error: ' + msg.message;
+    });
 
-        socket.on('redirect', function(msg) {
-            window.location.href = msg.url;
-        });
+    socket.on('redirect', function(msg) {
+        window.location.href = msg.url;
+    });
 
-        function stopConversation() {
-            socket.emit('stop_conversation');
+    function stopConversation() {
+        socket.emit('stop_conversation');
+    }
+
+    function animateValueChange(element, newValue) {
+        const currentValue = parseInt(element.innerText);
+
+        if (newValue > currentValue) {
+            element.classList.add('count-changing');
+            element.innerText = newValue;
+
+            setTimeout(() => {
+                element.classList.remove('count-changing');
+            }, 500);
         }
-
-         function animateValueChange(element, newValue) {
-            const currentValue = parseInt(element.innerText);
-
-            if (newValue > currentValue) {
-                element.classList.add('count-changing');
-                 element.innerText = newValue;
-
-                setTimeout(() => {
-                    element.classList.remove('count-changing');
-                }, 500);
-            }
-            else{
-                 element.innerText = newValue;
-            }
+        else{
+            element.innerText = newValue;
         }
-    </script>
+    }
+</script>
 </body>
 </html>

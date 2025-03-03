@@ -73,25 +73,26 @@ def create_emotion_bar_chart(emotion_scores: dict):
         scores = list(top_3_emotions.values())
 
         # Create the bar chart
-        plt.figure(figsize=(8, 4))
+        plt.figure(figsize=(8, 4))  # previous size
         bars = plt.bar(emotions, scores, color='#84d8b7')  # green color
         plt.xlabel('Emotions', fontproperties=font_prop, fontsize=12, fontweight='bold')
         plt.ylabel('Scores', fontproperties=font_prop, fontsize=12, fontweight='bold')
         plt.title('Current Top 3 Emotions', fontproperties=font_prop, fontsize=14, fontweight='bold')
         plt.ylim(0, max(scores) + 0.1)  # Adjust y-axis limit to make space for value labels
-        plt.xticks(rotation=45, ha='right', fontproperties=font_prop, fontsize=10, fontweight='bold')  # Rotate emotion labels for readability
-        plt.yticks(fontproperties=font_prop, fontsize=10, fontweight='bold')
+        plt.yticks(np.arange(0, max(scores) + 0.1, 0.1), fontproperties=font_prop, fontsize=8, fontweight='bold')  # Y-axis increments of 0.05
+        plt.xticks(rotation=45, ha='right', fontproperties=font_prop, fontsize=8, fontweight='bold')  # Rotate emotion labels for readability
         plt.tight_layout()
 
         # Add value labels above the bars
         for bar in bars:
             yval = bar.get_height()
             plt.text(bar.get_x() + bar.get_width()/2, yval, round(yval, 2), ha='center', va='bottom', 
-                     fontproperties=font_prop, fontsize=10, fontweight='bold')
+                     fontproperties=font_prop, fontsize=8, fontweight='bold')
 
         # Save the plot to a BytesIO object
         img = io.BytesIO()
         plt.savefig(img, format='png')
+        plt.savefig(img, format='png', dpi=200)
         img.seek(0)
         plt.close()  # Close the plot to free memory
 
@@ -117,8 +118,29 @@ def create_line_chart(emotion_data: dict, title: str, ylabel: str, color_map: di
     try:
         font_path = os.path.abspath("static/fonts/Roboto-Regular.ttf")  
         font_prop = font_manager.FontProperties(fname=font_path)
+        
+        # Check if there are any emotions with scores
+        if not any(emotion_data.values()):  # This checks if all lists are empty
+            plt.figure()  # Create a new figure to avoid errors
+            plt.text(0.5, 0.5, 'No data to display', ha='center', va='center', fontsize=12)
+            plt.axis('off')  # Turn off axis lines and ticks
+            img = io.BytesIO()
+            plt.savefig(img, format='png')
+            img.seek(0)
+            plt.close()
+            print(f"No data for line chart '{title}'. Returning empty chart.")
+            return base64.b64encode(img.read()).decode()
+            
+        # Determine maximum score for y-axis
+        max_score = 0
+        for scores in emotion_data.values():
+            if scores:
+                max_score = max(max_score, max(scores))
+        
+        y_max = max_score + 0.1  # Add buffer
+        y_ticks = np.arange(0, y_max + 0.05, 0.05)  # Generate ticks
 
-        plt.figure(figsize=(10, 6))
+        plt.figure(figsize=(6, 3))  # Reduced figure size
         
         # Ensure there are interactions to plot
         num_interactions = len(next(iter(emotion_data.values()), []))
@@ -137,17 +159,18 @@ def create_line_chart(emotion_data: dict, title: str, ylabel: str, color_map: di
             if scores:
                 plt.plot(x_values, scores, marker='o', linestyle='-', color=color_map[emotion], label=emotion)
 
-        plt.title(title, fontproperties=font_prop, fontsize=14, fontweight='bold')
-        plt.xlabel('Interaction', fontproperties=font_prop, fontsize=12, fontweight='bold')
-        plt.ylabel(ylabel, fontproperties=font_prop, fontsize=12, fontweight='bold')
-        plt.xticks(x_values, fontproperties=font_prop, fontsize=10, fontweight='bold')
-        plt.yticks(fontproperties=font_prop, fontsize=10, fontweight='bold')
+        plt.title(title, fontproperties=font_prop, fontsize=10, fontweight='bold')
+        plt.xlabel('Conversation Progression', fontproperties=font_prop, fontsize=8, fontweight='bold')
+        plt.ylabel(ylabel, fontproperties=font_prop, fontsize=8, fontweight='bold')
+        plt.xticks(x_values, fontproperties=font_prop, fontsize=6, fontweight='bold')
+        plt.yticks(y_ticks, fontproperties=font_prop, fontsize=6, fontweight='bold')
+        plt.ylim(0, y_max)  # set upper bond for max
         plt.grid(True)
-        plt.legend(prop=font_prop)  # Use font_prop for the legend
+        plt.legend(prop=font_prop, fontsize=6)  # Use font_prop for the legend
         plt.tight_layout()
 
         img = io.BytesIO()
-        plt.savefig(img, format='png')
+        plt.savefig(img, format='png', dpi=200)
         img.seek(0)
         plt.close()
 
@@ -178,27 +201,34 @@ def create_top_emotions_bar_chart(emotion_scores: dict, total_interactions: int)
         top_5_emotions = extract_top_n_emotions(average_emotion_scores, 5)
         emotions = list(top_5_emotions.keys())
         scores = list(top_5_emotions.values())
+            
+        max_score = max(scores) if scores else 0  # Determine max score for Y axis
+        y_max = max_score + 0.1  # Add buffer for chart
+        y_ticks = np.arange(0, y_max + 0.05, 0.05)  # Generate ticks
 
-        plt.figure(figsize=(10, 6))
+        plt.figure(figsize=(6, 3))  # Increased figure size
         bars = plt.bar(emotions, scores, color='#84d8b7')
-        plt.xlabel('Emotions', fontproperties=font_prop, fontsize=12, fontweight='bold')
-        plt.ylabel('Average Score', fontproperties=font_prop, fontsize=12, fontweight='bold')
-        plt.title('Top 5 Average Emotions', fontproperties=font_prop, fontsize=14, fontweight='bold')
-        plt.ylim(0, max(scores) + 0.1)
-        plt.xticks(rotation=45, ha='right', fontproperties=font_prop, fontsize=10, fontweight='bold')
-        plt.yticks(fontproperties=font_prop, fontsize=10, fontweight='bold')
+        plt.xlabel('Emotions', fontproperties=font_prop, fontsize=8, fontweight='bold')
+        plt.ylabel('Average Score', fontproperties=font_prop, fontsize=8, fontweight='bold')
+        plt.title('Top 5 Average Emotions', fontproperties=font_prop, fontsize=10, fontweight='bold')
+        plt.ylim(0, y_max) # add upper bond
+        plt.yticks(y_ticks, fontproperties=font_prop, fontsize=6, fontweight='bold')
+        plt.xticks(rotation=45, ha='right', fontproperties=font_prop, fontsize=6, fontweight='bold')
         plt.tight_layout()
 
         # Add value labels above the bars
         for bar in bars:
             yval = bar.get_height()
             plt.text(bar.get_x() + bar.get_width()/2, yval, round(yval, 2), ha='center', va='bottom', 
-                     fontproperties=font_prop, fontsize=10, fontweight='bold')
+                     fontproperties=font_prop, fontsize=6, fontweight='bold')
 
         img = io.BytesIO()
-        plt.savefig(img, format='png')
+        plt.savefig(img, format='png', dpi=200)
         img.seek(0)
         plt.close()
+
+        # revert to previous size to maintain appearance of main convo page
+        #plt.figure(figsize=(8, 4))  # previous size
 
         return base64.b64encode(img.read()).decode()
     except Exception as e:
@@ -278,11 +308,13 @@ async def hume_websocket_handler(message):
             socketio.emit('update_emotions', {'image': f'data:image/png;base64,{img_data}'})
         else:
             socketio.emit('hume_error', {'message': "Failed to create emotion chart"})
+        '''
         print(f"Positive Emotion Scores: {positive_emotion_scores}")
         print("\n")
         print(f"Negative Emotion Scores: {negative_emotion_scores}")
         print("\n")
         print(f"All Emotion Scores: {all_emotion_scores_overalls}")
+        '''
 
 async def hume_on_open():
     global hume_connected
@@ -410,14 +442,14 @@ def welcome():
 def evaluation(total_interactions):
     positive_emotion_chart = create_line_chart(
         positive_emotion_scores,
-        "Positive Emotion Trends",
-        "Emotion Score",
+        "Shifts in Desired Tones",
+        "Scores",
         {"sympathy": "#2ecc71", "calmness": "#3498db", "interest": "#9b59b6"}
     )
     negative_emotion_chart = create_line_chart(
         negative_emotion_scores,
-        "Negative Emotion Trends",
-        "Emotion Score",
+        "Shifts in Undesired Tones",
+        "Scores",
         {"doubt": "#e74c3c", "anxiety": "#f39c12", "distress": "#95a5a6"}
     )
     top_emotions_chart = create_top_emotions_bar_chart(all_emotion_scores_overalls, total_interactions)
