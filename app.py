@@ -13,10 +13,11 @@ import matplotlib
 matplotlib.use('Agg')  # Use the Agg backend
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib import font_manager
 
 # Initialize Flask and SocketIO
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'your_secret_key'  # Change this in production!
+app.config['SECRET_KEY'] = 'your_secret_key'  # change later
 socketio = SocketIO(app, async_mode='threading')
 
 # Load environment variables
@@ -40,28 +41,33 @@ def extract_top_n_emotions(emotion_scores: dict, n: int) -> dict:
     top_n_emotions = dict(sorted_emotions[:n])
     return top_n_emotions
 
-
 def create_emotion_bar_chart(emotion_scores: dict):
     """Generates a bar chart of emotion scores and returns it as a base64 encoded string."""
     try:
+        # Add Roboto font
+        font_path = os.path.abspath("static/fonts/Roboto-Regular.ttf")  
+        font_prop = font_manager.FontProperties(fname=font_path)
+        
         top_3_emotions = extract_top_n_emotions(emotion_scores, 3)
         emotions = list(top_3_emotions.keys())
         scores = list(top_3_emotions.values())
 
         # Create the bar chart
         plt.figure(figsize=(8, 4))
-        bars = plt.bar(emotions, scores, color='#84d8b7')  # Using your green color
-        plt.xlabel('Emotions')
-        plt.ylabel('Scores')
-        plt.title('Top 3 Emotion Analysis')
+        bars = plt.bar(emotions, scores, color='#84d8b7')  # green color
+        plt.xlabel('Emotions', fontproperties=font_prop, fontsize=12, fontweight='bold')
+        plt.ylabel('Scores', fontproperties=font_prop, fontsize=12, fontweight='bold')
+        plt.title('Top 3 Emotion Analysis', fontproperties=font_prop, fontsize=14, fontweight='bold')
         plt.ylim(0, max(scores) + 0.1)  # Adjust y-axis limit to make space for value labels
-        plt.xticks(rotation=45, ha='right')  # Rotate emotion labels for readability
+        plt.xticks(rotation=45, ha='right', fontproperties=font_prop, fontsize=10, fontweight='bold')  # Rotate emotion labels for readability
+        plt.yticks(fontproperties=font_prop, fontsize=10, fontweight='bold')
         plt.tight_layout()
 
         # Add value labels above the bars
         for bar in bars:
             yval = bar.get_height()
-            plt.text(bar.get_x() + bar.get_width()/2, yval, round(yval, 2), ha='center', va='bottom')
+            plt.text(bar.get_x() + bar.get_width()/2, yval, round(yval, 2), ha='center', va='bottom', 
+                     fontproperties=font_prop, fontsize=10, fontweight='bold')
 
         # Save the plot to a BytesIO object
         img = io.BytesIO()
@@ -260,7 +266,7 @@ def new_conversation():
 
 @app.route('/chat')
 def chat():
-    return render_template('index.html')  # Your existing chat page
+    return render_template('index.html')  # Conversation page
 
 # --- Main ---
 if __name__ == '__main__':
