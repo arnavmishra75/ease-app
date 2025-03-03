@@ -14,6 +14,8 @@ matplotlib.use('Agg')  # Use the Agg backend
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import font_manager
+import string
+import re
 
 # Initialize Flask and SocketIO
 app = Flask(__name__)
@@ -33,6 +35,9 @@ main_loop = None
 microphone_task = None
 byte_strs = Stream.new()
 filler_word_count = 0  # Initialize filler word counter
+all_emotion_scores_overalls = {}
+positive_emotion_scores = {"sympathy": [], "calmness": [], "interest": []}
+negative_emotion_scores = {"doubt": [], "anxiety": [], "distress": []}
 
 # --- Utility Functions ---
 
@@ -41,6 +46,19 @@ def extract_top_n_emotions(emotion_scores: dict, n: int) -> dict:
     sorted_emotions = sorted(emotion_scores.items(), key=lambda item: item[1], reverse=True)
     top_n_emotions = dict(sorted_emotions[:n])
     return top_n_emotions
+
+def update_key_emotion_deltas(key_emotion_deltas: dict, emotion_scores: dict):
+    """Updates the key emotion deltas based on the current emotion scores."""
+    for key, values in key_emotion_deltas.items():
+        values.append(emotion_scores[key])
+
+def update_emotion_scores_overall(emotion_scores_overall: dict, emotion_scores: dict):
+    """Updates the emotion scores overall dictionary."""
+    for key, value in emotion_scores.items():
+        if key in emotion_scores_overall:
+            emotion_scores_overall[key] += value
+        else:
+            emotion_scores_overall[key] = value
 
 def create_emotion_bar_chart(emotion_scores: dict):
     """Generates a bar chart of emotion scores and returns it as a base64 encoded string."""
@@ -58,7 +76,7 @@ def create_emotion_bar_chart(emotion_scores: dict):
         bars = plt.bar(emotions, scores, color='#84d8b7')  # green color
         plt.xlabel('Emotions', fontproperties=font_prop, fontsize=12, fontweight='bold')
         plt.ylabel('Scores', fontproperties=font_prop, fontsize=12, fontweight='bold')
-        plt.title('Top 3 Emotion Analysis', fontproperties=font_prop, fontsize=14, fontweight='bold')
+        plt.title('Current Top 3 Emotions', fontproperties=font_prop, fontsize=14, fontweight='bold')
         plt.ylim(0, max(scores) + 0.1)  # Adjust y-axis limit to make space for value labels
         plt.xticks(rotation=45, ha='right', fontproperties=font_prop, fontsize=10, fontweight='bold')  # Rotate emotion labels for readability
         plt.yticks(fontproperties=font_prop, fontsize=10, fontweight='bold')
@@ -110,14 +128,17 @@ async def hume_websocket_handler(message):
         role = "E.A.S.E" if message.message.role.upper() == "ASSISTANT" else "You"
         message_text = message.message.content
         
-        # Replace "ease" variations with "E.A.S.E"
-        ease_vars = ["ease", "ease.", "ease?", "ease!", "ease,", "Ease", "Ease.", "Ease?", "Ease!", "Ease,"]
+        # Replace standalone "ease" variations with "E.A.S.E"
+        ease_vars = [r'\bease\b', r'\bease\.\b', r'\bease\?\b', r'\bease\!\b', r'\bease\,\b',
+                     r'\bEase\b', r'\bEase\.\b', r'\bEase\?\b', r'\bEase\!\b', r'\bEase\,\b']
         for var in ease_vars:
-            message_text = message_text.replace(var, "E.A.S.E")
+            message_text = re.sub(var, "E.A.S.E", message_text)
         
         # Count filler words (only for user messages)
         if role == "You":
             words = message_text.lower().split()
+            # Remove punctuation from each word before checking
+            words = [word.strip(string.punctuation) for word in words]
             filler_word_count += sum(1 for word in words if word in filler_words)
 
         text = f"{role}: {message_text}"
@@ -126,7 +147,6 @@ async def hume_websocket_handler(message):
 
         if message.from_text is False and role == "You":
             scores = dict(message.models.prosody.scores)
-            print(scores.keys())
 
     elif message.type == "audio_output":
         message_str: str = message.data
@@ -141,12 +161,17 @@ async def hume_websocket_handler(message):
         return
 
     if scores:
-        # Generate the emotion bar chart
+        # update emotion scores
+        update_key_emotion_deltas(positive_emotion_scores, scores)
+        update_key_emotion_deltas(negative_emotion_scores, scores)
+        update_emotion_scores_overall(all_emotion_scores_overalls, scores)
+        # generate the emotion bar chart
         img_data = create_emotion_bar_chart(scores)
         if img_data:
             socketio.emit('update_emotions', {'image': f'data:image/png;base64,{img_data}'})
         else:
             socketio.emit('hume_error', {'message': "Failed to create emotion chart"})
+        #print(positive_emotion_scores, negative_emotion_scores, all_emotion_scores_overalls)
 
 async def hume_on_open():
     global hume_connected
@@ -226,10 +251,14 @@ def reset_global_variables():
             main_loop.close()
         except:
             pass
+    # reset everything now that new session starting!
     main_loop = None
     microphone_task = None
-    byte_strs = Stream.new()  # Reset the byte stream
-    filler_word_count = 0 # Reset filler word count
+    byte_strs = Stream.new()  #
+    filler_word_count = 0 
+    all_emotion_scores_overalls = {} 
+    positive_emotion_scores = {"sympathy": [], "calmness": [], "interest": []}
+    negative_emotion_scores = {"doubt": [], "anxiety": [], "distress": []}
 
 def run_hume_client():
     global main_loop, hume_socket

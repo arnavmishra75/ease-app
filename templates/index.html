@@ -61,12 +61,13 @@
             align-items: center;
             width: 100%;
             max-width: 800px;
-            margin-bottom: 1rem;
+            margin-bottom: 2rem; /* Increased margin */
         }
         #emotion-chart {
             max-width: 500px;
             flex: 2; /* Take up more space */
             transition: opacity 0.5s ease; /* Fade-in effect */
+            padding-right: 20px; /* Add padding */
         }
         .filler-count-container {
             width: 150px;
@@ -82,7 +83,7 @@
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
             opacity: 0; /* Initially hidden */
             transition: opacity 0.5s ease, transform 0.3s ease; /* Fade-in and scale effect */
-            border: 3px solid #a8e6cf; /* Add a subtle border */
+            margin-left: 20px; /* Add margin */
         }
         .filler-count-container.show {
             opacity: 1;
@@ -95,6 +96,10 @@
             font-weight: bold;
             font-size: 0.8rem; /* Smaller title size */
             color: #1d2f4b;
+            text-align: center;
+        }
+         .filler-count-header .usage-color {
+            color: #84d8b7; /* Green color for "Usage" */
         }
         .filler-count {
             font-size: 2.5rem; /* Larger number */
@@ -143,14 +148,14 @@
     <div class="chart-container">
         <img id="emotion-chart" src="" alt="Emotion Chart" style="display: none;">
         <div class="filler-count-container">
-            <p class="filler-count-header">Current Filler Words Usage</p>
+            <p class="filler-count-header">Current Filler Words Usage<span class="usage-color">:</span></p>
             <span class="filler-count" id="filler-count">0</span>
         </div>
     </div>
 
     <div id="error"></div>
 
-    <button id="stopButton" onclick="stopConversation()">Stop Conversation()">Stop Conversation</button>
+    <button id="stopButton" onclick="stopConversation()">Stop Conversation</button>
 
     <script type="text/javascript">
         const socket = io();
@@ -165,7 +170,9 @@
 
         socket.on('update_transcript', function(msg) {
             const transcriptDiv = document.getElementById('transcript');
-            transcriptDiv.innerHTML += msg.data + '<br>';
+            // Bold role names
+            const formattedText = msg.data.replace(/(E\.A\.S\.E|You):/g, '<strong>$1:<\/strong>');
+            transcriptDiv.innerHTML += formattedText + '<br><br>'; // Add line break space
             transcriptDiv.scrollTop = transcriptDiv.scrollHeight;
         });
 
