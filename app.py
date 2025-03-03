@@ -38,6 +38,7 @@ filler_word_count = 0  # Initialize filler word counter
 all_emotion_scores_overalls = {}
 positive_emotion_scores = {"sympathy": [], "calmness": [], "interest": []}
 negative_emotion_scores = {"doubt": [], "anxiety": [], "distress": []}
+total_interactions = 0
 
 # --- Utility Functions ---
 
@@ -99,6 +100,110 @@ def create_emotion_bar_chart(emotion_scores: dict):
     except Exception as e:
         print(f"Error creating emotion chart: {e}")
         return None
+    
+def create_line_chart(emotion_data: dict, title: str, ylabel: str, color_map: dict):
+    """
+    Generates a line chart for emotion trends over interactions.
+
+    Args:
+        emotion_data (dict): Dictionary of emotions and their scores over interactions.
+        title (str): Title of the chart.
+        ylabel (str): Label for the y-axis.
+        color_map (dict): Dictionary mapping emotion names to colors.
+
+    Returns:
+        str: Base64 encoded PNG image of the chart.
+    """
+    try:
+        font_path = os.path.abspath("static/fonts/Roboto-Regular.ttf")  
+        font_prop = font_manager.FontProperties(fname=font_path)
+
+        plt.figure(figsize=(10, 6))
+        
+        # Ensure there are interactions to plot
+        num_interactions = len(next(iter(emotion_data.values()), []))
+        if num_interactions == 0:
+            plt.text(0.5, 0.5, 'No data to display', ha='center', va='center', fontsize=12)
+            plt.axis('off')  # Turn off axis lines and ticks
+            img = io.BytesIO()
+            plt.savefig(img, format='png')
+            img.seek(0)
+            plt.close()
+            return base64.b64encode(img.read()).decode()
+
+        x_values = range(1, num_interactions + 1)  # Interactions start from 1
+
+        for emotion, scores in emotion_data.items():
+            if scores:
+                plt.plot(x_values, scores, marker='o', linestyle='-', color=color_map[emotion], label=emotion)
+
+        plt.title(title, fontproperties=font_prop, fontsize=14, fontweight='bold')
+        plt.xlabel('Interaction', fontproperties=font_prop, fontsize=12, fontweight='bold')
+        plt.ylabel(ylabel, fontproperties=font_prop, fontsize=12, fontweight='bold')
+        plt.xticks(x_values, fontproperties=font_prop, fontsize=10, fontweight='bold')
+        plt.yticks(fontproperties=font_prop, fontsize=10, fontweight='bold')
+        plt.grid(True)
+        plt.legend(prop=font_prop)  # Use font_prop for the legend
+        plt.tight_layout()
+
+        img = io.BytesIO()
+        plt.savefig(img, format='png')
+        img.seek(0)
+        plt.close()
+
+        return base64.b64encode(img.read()).decode()
+    except Exception as e:
+        print(f"Error creating line chart: {e}")
+        return None
+
+def create_top_emotions_bar_chart(emotion_scores: dict, total_interactions: int):
+    """
+    Generates a bar chart of the top 5 average emotions from the overall scores.
+
+    Args:
+        emotion_scores (dict): Dictionary of overall emotion scores.
+        total_interactions (int): Total number of interactions.
+
+    Returns:
+        str: Base64 encoded PNG image of the chart.
+    """
+    try:
+        font_path = os.path.abspath("static/fonts/Roboto-Regular.ttf")  
+        font_prop = font_manager.FontProperties(fname=font_path)
+        
+        # Calculate average scores
+        average_emotion_scores = {k: v / total_interactions for k, v in emotion_scores.items()}
+
+        # Extract top 5 emotions
+        top_5_emotions = extract_top_n_emotions(average_emotion_scores, 5)
+        emotions = list(top_5_emotions.keys())
+        scores = list(top_5_emotions.values())
+
+        plt.figure(figsize=(10, 6))
+        bars = plt.bar(emotions, scores, color='#84d8b7')
+        plt.xlabel('Emotions', fontproperties=font_prop, fontsize=12, fontweight='bold')
+        plt.ylabel('Average Score', fontproperties=font_prop, fontsize=12, fontweight='bold')
+        plt.title('Top 5 Average Emotions', fontproperties=font_prop, fontsize=14, fontweight='bold')
+        plt.ylim(0, max(scores) + 0.1)
+        plt.xticks(rotation=45, ha='right', fontproperties=font_prop, fontsize=10, fontweight='bold')
+        plt.yticks(fontproperties=font_prop, fontsize=10, fontweight='bold')
+        plt.tight_layout()
+
+        # Add value labels above the bars
+        for bar in bars:
+            yval = bar.get_height()
+            plt.text(bar.get_x() + bar.get_width()/2, yval, round(yval, 2), ha='center', va='bottom', 
+                     fontproperties=font_prop, fontsize=10, fontweight='bold')
+
+        img = io.BytesIO()
+        plt.savefig(img, format='png')
+        img.seek(0)
+        plt.close()
+
+        return base64.b64encode(img.read()).decode()
+    except Exception as e:
+        print(f"Error creating top emotions chart: {e}")
+        return None
 
 # --- WebSocket Event Handlers ---
 @socketio.on('connect')
@@ -114,13 +219,14 @@ def disconnect():
 
 @socketio.on('stop_conversation')
 def stop_conversation():
+    global total_interactions
     print('Conversation stopped by client')
     stop_hume_connection()
-    emit('redirect', {'url': url_for('evaluation')})
+    emit('redirect', {'url': url_for('evaluation', total_interactions=total_interactions)})
 
 # --- Hume API Integration ---
 async def hume_websocket_handler(message):
-    global filler_word_count
+    global filler_word_count, total_interactions
     scores = {}
     filler_words = ["like", "well", "so", "um", "ah", "er", "you know", "i mean"]
 
@@ -147,6 +253,7 @@ async def hume_websocket_handler(message):
 
         if message.from_text is False and role == "You":
             scores = dict(message.models.prosody.scores)
+            total_interactions += 1
 
     elif message.type == "audio_output":
         message_str: str = message.data
@@ -171,7 +278,11 @@ async def hume_websocket_handler(message):
             socketio.emit('update_emotions', {'image': f'data:image/png;base64,{img_data}'})
         else:
             socketio.emit('hume_error', {'message': "Failed to create emotion chart"})
-        #print(positive_emotion_scores, negative_emotion_scores, all_emotion_scores_overalls)
+        print(f"Positive Emotion Scores: {positive_emotion_scores}")
+        print("\n")
+        print(f"Negative Emotion Scores: {negative_emotion_scores}")
+        print("\n")
+        print(f"All Emotion Scores: {all_emotion_scores_overalls}")
 
 async def hume_on_open():
     global hume_connected
@@ -210,7 +321,6 @@ async def hume_microphone_handler(socket):
         print(f"Error in microphone stream: {e}")
         socketio.emit('hume_error', {'message': f"Microphone Error: {e}"})
 
-
 async def shutdown_microphone():
     global microphone_task
     if microphone_task:
@@ -239,10 +349,8 @@ def stop_hume_connection():
     if hume_socket:
         hume_socket = None
 
-    reset_global_variables()
-
 def reset_global_variables():
-    global hume_socket, main_loop, microphone_task, byte_strs, hume_connected, filler_word_count
+    global hume_socket, main_loop, microphone_task, byte_strs, hume_connected, filler_word_count, all_emotion_scores_overalls, positive_emotion_scores, negative_emotion_scores, total_interactions
     hume_socket = None
     hume_connected = False
     if main_loop:
@@ -259,6 +367,7 @@ def reset_global_variables():
     all_emotion_scores_overalls = {} 
     positive_emotion_scores = {"sympathy": [], "calmness": [], "interest": []}
     negative_emotion_scores = {"doubt": [], "anxiety": [], "distress": []}
+    total_interactions = 0
 
 def run_hume_client():
     global main_loop, hume_socket
@@ -297,13 +406,33 @@ async def hume_client_task():
 def welcome():
     return render_template('welcome.html')
 
-@app.route('/evaluation')
-def evaluation():
-    return render_template('evaluation.html')
+@app.route('/evaluation/<int:total_interactions>')
+def evaluation(total_interactions):
+    positive_emotion_chart = create_line_chart(
+        positive_emotion_scores,
+        "Positive Emotion Trends",
+        "Emotion Score",
+        {"sympathy": "#2ecc71", "calmness": "#3498db", "interest": "#9b59b6"}
+    )
+    negative_emotion_chart = create_line_chart(
+        negative_emotion_scores,
+        "Negative Emotion Trends",
+        "Emotion Score",
+        {"doubt": "#e74c3c", "anxiety": "#f39c12", "distress": "#95a5a6"}
+    )
+    top_emotions_chart = create_top_emotions_bar_chart(all_emotion_scores_overalls, total_interactions)
+
+    return render_template(
+        'evaluation.html',
+        positive_emotion_chart=positive_emotion_chart,
+        negative_emotion_chart=negative_emotion_chart,
+        top_emotions_chart=top_emotions_chart
+    )
 
 @app.route('/new_conversation')
 def new_conversation():
-    session.clear()  # Clears Flask session variables
+    reset_global_variables() # reset everything
+    session.clear()  # Clears flask session variables
     stop_hume_connection()  # Stop the current Hume connection
     start_hume_connection()  # Start a new Hume connection
     return redirect(url_for('chat'))  # Redirect to the chat page
