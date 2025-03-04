@@ -9,6 +9,9 @@ from flask_socketio import SocketIO, emit
 from hume.client import AsyncHumeClient
 from hume.empathic_voice.chat.socket_client import ChatConnectOptions
 from hume import MicrophoneInterface, Stream
+from keras.saving import load_model
+from sentence_transformers import SentenceTransformer
+import pandas as pd
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
@@ -21,6 +24,14 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your_secret_key'  # change later
 socketio = SocketIO(app, async_mode='threading')
 matplotlib.use('Agg')  # use agg so that charts aren't rendered immediately (instead saved)
+
+# Load the model and encoder
+lexical_encoder = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
+try:
+    lexical_model = load_model('models/lexical_model_scaled_outputs.keras')
+except Exception as e:
+    print(f"Error loading model: {e}")
+    lexical_model = None  # Handle model loading failure
 
 # Load environment variables
 load_dotenv()
@@ -38,6 +49,7 @@ filler_word_count = 0  # Initialize filler word counter
 all_emotion_scores_overalls = {}
 positive_emotion_scores = {"sympathy": [], "calmness": [], "interest": []}
 negative_emotion_scores = {"doubt": [], "anxiety": [], "distress": []}
+user_responses = []
 total_interactions = 0
 
 # --- Utility Functions ---
@@ -61,6 +73,31 @@ def update_emotion_scores_overall(emotion_scores_overall: dict, emotion_scores: 
         else:
             emotion_scores_overall[key] = value
 
+def flatten_embeddings(df):
+    embeddings_df = pd.DataFrame(df['embedding'].tolist())
+    embeddings_df.columns = [f'embedding_{i}' for i in range(embeddings_df.shape[1])]
+    df = df.drop(columns=['embedding']).join(embeddings_df)
+    return df
+
+def get_lexical_score(responses, encoder, model):
+    """Calculates the lexical score for a list of responses."""
+    if model is None:
+        print("Model not loaded, cannot calculate lexical score.")
+        return None
+
+    df = pd.DataFrame(responses, columns=["text"])
+    df["embedding"] = df["text"].apply(lambda x: encoder.encode(x))
+    numerical_df = flatten_embeddings(df).drop(columns=["text"])
+    try:
+        scores = model.predict(numerical_df)
+        total_score = 0
+        for score in scores:
+            total_score += score[0]
+        return np.round((total_score / len(scores))*100, 1)
+    except Exception as e:
+        print(f"Error during prediction: {e}")
+        return None
+
 def create_emotion_bar_chart(emotion_scores: dict):
     """Generates a bar chart of emotion scores and returns it as a base64 encoded string."""
     try:
@@ -81,9 +118,7 @@ def create_emotion_bar_chart(emotion_scores: dict):
         plt.ylim(0, max(scores) + 0.1)  # Adjust y-axis limit to make space for value labels
         plt.yticks(np.arange(0, max(scores) + 0.1, 0.1), fontproperties=font_prop, fontsize=8, fontweight='bold')  # Y-axis increments of 0.05
         plt.xticks(rotation=45, ha='right', fontproperties=font_prop, fontsize=8, fontweight='bold')  # Rotate emotion labels for readability
-        plt.tight_layout()
-
-        # Add value labels above the bars
+        plt.tight_layout() # Add value labels above the bars
         for bar in bars:
             yval = bar.get_height()
             plt.text(bar.get_x() + bar.get_width()/2, yval, round(yval, 2), ha='center', va='bottom', 
@@ -104,12 +139,10 @@ def create_emotion_bar_chart(emotion_scores: dict):
     
 def create_line_chart(emotion_data: dict, title: str, ylabel: str, color_map: dict):
     """
-    Generates a line chart for emotion trends over interactions.
-
-    Args:
+    Generates a line chart for emotion trends over interactions.... Args:
         emotion_data (dict): Dictionary of emotions and their scores over interactions.
         title (str): Title of the chart.
-        ylabel (str): Label for the y-axis.
+        ylabel (str): Title of the chart.
         color_map (dict): Dictionary mapping emotion names to colors.
 
     Returns:
@@ -185,9 +218,7 @@ def create_top_emotions_bar_chart(emotion_scores: dict, total_interactions: int)
 
     Args:
         emotion_scores (dict): Dictionary of overall emotion scores.
-        total_interactions (int): Total number of interactions.
-
-    Returns:
+        total_interactions (int): Total number of interactions.... Returns:
         str: Base64 encoded PNG image of the chart.
     """
     try:
@@ -195,9 +226,7 @@ def create_top_emotions_bar_chart(emotion_scores: dict, total_interactions: int)
         font_prop = font_manager.FontProperties(fname=font_path)
         
         # Calculate average scores
-        average_emotion_scores = {k: v / total_interactions for k, v in emotion_scores.items()}
-
-        # Extract top 5 emotions
+        average_emotion_scores = {k: v / total_interactions for k, v in emotion_scores.items()} # Extract top 5 emotions
         top_5_emotions = extract_top_n_emotions(average_emotion_scores, 5)
         emotions = list(top_5_emotions.keys())
         scores = list(top_5_emotions.values())
@@ -249,14 +278,23 @@ def disconnect():
 
 @socketio.on('stop_conversation')
 def stop_conversation():
-    global total_interactions
+    global total_interactions, user_responses, lexical_encoder, lexical_model
     print('Conversation stopped by client')
     stop_hume_connection()
+    if lexical_model:
+        print(f"User Responses:\n{user_responses}")  # Print the user responses
+        scores = get_lexical_score(user_responses, lexical_encoder, lexical_model)
+        if scores is not None:
+             print(f"Scores on Responses:\n{scores}")
+        else:
+            print("Could not generate scores")
+    else:
+        print("Lexical Model did not load")
     emit('redirect', {'url': url_for('evaluation', total_interactions=total_interactions)})
 
 # --- Hume API Integration ---
 async def hume_websocket_handler(message):
-    global filler_word_count, total_interactions
+    global filler_word_count, total_interactions, user_responses
     scores = {}
     filler_words = ["like", "well", "so", "um", "ah", "er", "you know", "i mean"]
 
@@ -264,6 +302,10 @@ async def hume_websocket_handler(message):
         role = "E.A.S.E" if message.message.role.upper() == "ASSISTANT" else "You"
         message_text = message.message.content
         
+        # Collect User Responses
+        if role == "You":
+            user_responses.append(message_text)
+
         # Replace standalone "ease" variations with "E.A.S.E"
         ease_vars = [r'\bease\b', r'\bease\.\b', r'\bease\?\b', r'\bease\!\b', r'\bease\,\b',
                      r'\bEase\b', r'\bEase\.\b', r'\bEase\?\b', r'\bEase\!\b', r'\bEase\,\b']
@@ -308,13 +350,6 @@ async def hume_websocket_handler(message):
             socketio.emit('update_emotions', {'image': f'data:image/png;base64,{img_data}'})
         else:
             socketio.emit('hume_error', {'message': "Failed to create emotion chart"})
-        '''
-        print(f"Positive Emotion Scores: {positive_emotion_scores}")
-        print("\n")
-        print(f"Negative Emotion Scores: {negative_emotion_scores}")
-        print("\n")
-        print(f"All Emotion Scores: {all_emotion_scores_overalls}")
-        '''
 
 async def hume_on_open():
     global hume_connected
@@ -382,7 +417,7 @@ def stop_hume_connection():
         hume_socket = None
 
 def reset_global_variables():
-    global hume_socket, main_loop, microphone_task, byte_strs, hume_connected, filler_word_count, all_emotion_scores_overalls, positive_emotion_scores, negative_emotion_scores, total_interactions
+    global hume_socket, main_loop, microphone_task, byte_strs, hume_connected, filler_word_count, all_emotion_scores_overalls, positive_emotion_scores, negative_emotion_scores, total_interactions, user_responses
     hume_socket = None
     hume_connected = False
     if main_loop:
@@ -399,7 +434,9 @@ def reset_global_variables():
     all_emotion_scores_overalls = {} 
     positive_emotion_scores = {"sympathy": [], "calmness": [], "interest": []}
     negative_emotion_scores = {"doubt": [], "anxiety": [], "distress": []}
+    user_responses = []
     total_interactions = 0
+    
 
 def run_hume_client():
     global main_loop, hume_socket
