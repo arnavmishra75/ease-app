@@ -191,8 +191,7 @@ def create_line_chart(emotion_data: dict, title: str, ylabel: str, color_map: di
         for emotion, scores in emotion_data.items():
             if scores:
                 plt.plot(x_values, scores, marker='o', linestyle='-', color=color_map[emotion], label=emotion)
-
-        plt.title(title, fontproperties=font_prop, fontsize=15, fontweight='bold')
+        plt.title(title, fontproperties=font_prop, fontsize=15, fontweight='bold', color = "#1d2f4b")
         plt.xlabel('Conversation Progression', fontproperties=font_prop, fontsize=8, fontweight='bold')
         plt.ylabel(ylabel, fontproperties=font_prop, fontsize=8, fontweight='bold')
         plt.xticks(x_values, fontproperties=font_prop, fontsize=6, fontweight='bold')
@@ -239,7 +238,7 @@ def create_top_emotions_bar_chart(emotion_scores: dict, total_interactions: int)
         bars = plt.bar(emotions, scores, color='#84d8b7')
         plt.xlabel('Emotions', fontproperties=font_prop, fontsize=8, fontweight='bold')
         plt.ylabel('Average Score', fontproperties=font_prop, fontsize=8, fontweight='bold')
-        plt.title('Top 5 Average Emotions', fontproperties=font_prop, fontsize=15, fontweight='bold')
+        plt.title('Top 5 Average Emotions', fontproperties=font_prop, fontsize=15, fontweight='bold', color = "#1d2f4b")
         plt.ylim(0, y_max) # add upper bond
         plt.yticks(y_ticks, fontproperties=font_prop, fontsize=6, fontweight='bold')
         plt.xticks(rotation=45, ha='right', fontproperties=font_prop, fontsize=6, fontweight='bold')
@@ -266,43 +265,43 @@ def create_top_emotions_bar_chart(emotion_scores: dict, total_interactions: int)
 
 def create_circular_progress_bar(score):
     try:
-        font_path = os.path.abspath("static/fonts/Roboto-Regular.ttf")  
+        font_path = os.path.abspath("static/fonts/Roboto-Regular.ttf")
         font_prop = font_manager.FontProperties(fname=font_path)
-        
+
         fig, ax = plt.subplots(figsize=(4, 4))  # Keep size consistent
-        
+
         # Create the circular progress bar
         wedgeprops = {'width': 0.3, 'edgecolor': 'white'}
-        wedges, texts = ax.pie([score, 100-score], colors=['#84d8b7', 'white'], 
-                               startangle=90, counterclock=False, wedgeprops=wedgeprops)
-        
+        ax.pie([score, 100 - score], colors=['#84d8b7', 'white'],
+               startangle=90, counterclock=False, wedgeprops=wedgeprops)
+
         # Add the percentage text in the center
-        ax.text(0, 0, f"{score}%", ha='center', va='center', 
-                fontsize=30, fontweight='bold', fontproperties=font_prop, color="#1d2f4b") 
-        
-        # Remove the axis
-        ax.set_aspect('equal')  # Ensures the pie is circular
-        ax.set_xticks([])  # Hide x-ticks
-        ax.set_yticks([])  # Hide y-ticks
-        ax.spines[:].set_visible(False)  # Hide spines
+        ax.text(0, 0, f"{score}%", ha='center', va='center',
+                fontsize=30, fontweight='bold', fontproperties=font_prop, color="#1d2f4b")
 
-        # Add title
-        plt.title("Lexical Quality Score", fontproperties=font_prop, fontsize=15, 
-                  fontweight='bold', pad=20, color="#1d2f4b")
+        # Ensure it's a circle
+        ax.axis('equal')
 
-        # Save the plot to a BytesIO object
+        # Hide the axes
+        ax.spines[:].set_visible(False)
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+        # Title outside the plot area
+        ax.set_title('Lexical Quality Score', fontproperties=font_prop, fontsize=18,
+                     fontweight='bold', color="#1d2f4b", pad=20)
+
+        fig.canvas.draw()
         img = io.BytesIO()
-        plt.savefig(img, format='png', dpi=200, bbox_inches='tight', transparent=True)
+        fig.savefig(img, format='png', dpi=200, bbox_inches='tight', transparent=True)
         img.seek(0)
-        plt.close()
+        plt.close(fig)
 
-        # Encode as base64
         return base64.b64encode(img.read()).decode()
+
     except Exception as e:
         print(f"Error creating circular progress bar: {e}")
         return None
-
-
 # --- WebSocket Event Handlers ---
 @socketio.on('connect')
 def connect():
@@ -322,7 +321,7 @@ def stop_conversation():
     stop_hume_connection()
     lexical_score = None
     if lexical_model:
-        print(f"User Responses:\n{user_responses}")  # Print the user responses
+        #print(f"User Responses:\n{user_responses}")  
         scores = get_lexical_score(user_responses, lexical_encoder, lexical_model)
         if scores is not None:
             lexical_score = scores
@@ -376,8 +375,8 @@ async def hume_websocket_handler(message):
 
     elif message.type == "error":
         error_message: str = message.message
-        print(f"Error from Hume API: {error_message}")
-        socketio.emit('hume_error', {'message': f"Hume API Error: {error_message}"})
+        print(f"Error from Hume API: {error}")
+        socketio.emit('hume_error', {'message': f"Hume API Error: {error}"})
         return
 
     if scores:
@@ -453,16 +452,27 @@ def stop_hume_connection():
             task.cancel()
         main_loop.call_soon_threadsafe(main_loop.stop)
         asyncio.run_coroutine_threadsafe(shutdown_microphone(), main_loop)
+        
+        # Wait for the loop to actually stop
+        try:
+            main_loop.run_until_complete(asyncio.sleep(0.1))
+        except RuntimeError:
+            pass  # The loop was already closed
 
     if hume_socket:
         hume_socket = None
 
+    main_loop = None
+
+
 def reset_global_variables():
-    global hume_socket, main_loop, microphone_task, byte_strs, hume_connected, filler_word_count, all_emotion_scores_overalls, positive_emotion_scores, negative_emotion_scores, total_interactions, user_responses
+    global hume_socket, main_loop, microphone_task, byte_strs, hume_connected, filler_word_count, all_emotion_scores_overalls, positive_emotion_scores, negative_emotion_scores, total_interactions, user_responses, lexical_model, lexical_encoder
     hume_socket = None
     hume_connected = False
     if main_loop:
         try:
+            for task in asyncio.all_tasks(main_loop):
+                task.cancel()
             main_loop.stop()
             main_loop.close()
         except:
@@ -477,16 +487,28 @@ def reset_global_variables():
     negative_emotion_scores = {"doubt": [], "anxiety": [], "distress": []}
     user_responses = []
     total_interactions = 0
-    
+    try:
+        lexical_model = load_model('models/lexical_model_scaled_outputs.keras')
+        lexical_encoder = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
+    except Exception as e:
+        print(f"Model load error:\n{e}")
 
 def run_hume_client():
     global main_loop, hume_socket
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     main_loop = loop
-    loop.run_until_complete(hume_client_task())
-    loop.close()
-    hume_socket = None
+    try:
+        loop.run_until_complete(hume_client_task())
+    except RuntimeError as e:
+        if str(e) == 'Event loop stopped before Future completed.':
+            print("Hume client task stopped prematurely. This is expected during shutdown or when starting a new conversation.")
+        else:
+            print(f"Unexpected error in run_hume_client: {e}")
+    finally:
+        loop.close()
+        hume_socket = None
+
 
 async def hume_client_task():
     global hume_socket, hume_connected, microphone_task
@@ -505,7 +527,12 @@ async def hume_client_task():
             hume_connected = True
             print("Hume client connected.")
             microphone_task = asyncio.create_task(hume_microphone_handler(socket))
-            await asyncio.Future()  # Keep the connection open indefinitely
+            try:
+                await asyncio.Future()  # Keep the connection open indefinitely
+            except asyncio.CancelledError:
+                print("Hume client task cancelled.")
+            except Exception as e:
+                print(f"Exception in hume_client_task: {e}")
     except Exception as e:
         hume_connected = False
         print(f"Error connecting to Hume: {e}")
@@ -520,13 +547,13 @@ def welcome():
 def evaluation(total_interactions):
     positive_emotion_chart = create_line_chart(
         positive_emotion_scores,
-        "Shifts in Desired Tones",
+        "Shifts in Progress of Desired Tones",
         "Scores",
         {"sympathy": "#2ecc71", "calmness": "#3498db", "interest": "#9b59b6"}
     )
     negative_emotion_chart = create_line_chart(
         negative_emotion_scores,
-        "Shifts in Undesired Tones",
+        "Shifts in Progress of Undesired Tones",
         "Scores",
         {"doubt": "#e74c3c", "anxiety": "#f39c12", "distress": "#95a5a6"}
     )
