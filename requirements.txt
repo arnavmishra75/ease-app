@@ -1,4 +1,11 @@
 hume
-"hume[microphone]"
+hume[microphone]
 python-dotenv
 matplotlib
+pandas
+numpy
+fsspec
+huggingface_hub
+sentence-transformers
+tensorflow
+scikit-learn
