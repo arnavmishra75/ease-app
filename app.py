@@ -15,7 +15,7 @@ import pandas as pd
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib import font_manager
+from matplotlib import font_manager, patches
 import string
 import re
 
@@ -192,7 +192,7 @@ def create_line_chart(emotion_data: dict, title: str, ylabel: str, color_map: di
             if scores:
                 plt.plot(x_values, scores, marker='o', linestyle='-', color=color_map[emotion], label=emotion)
 
-        plt.title(title, fontproperties=font_prop, fontsize=10, fontweight='bold')
+        plt.title(title, fontproperties=font_prop, fontsize=15, fontweight='bold')
         plt.xlabel('Conversation Progression', fontproperties=font_prop, fontsize=8, fontweight='bold')
         plt.ylabel(ylabel, fontproperties=font_prop, fontsize=8, fontweight='bold')
         plt.xticks(x_values, fontproperties=font_prop, fontsize=6, fontweight='bold')
@@ -239,7 +239,7 @@ def create_top_emotions_bar_chart(emotion_scores: dict, total_interactions: int)
         bars = plt.bar(emotions, scores, color='#84d8b7')
         plt.xlabel('Emotions', fontproperties=font_prop, fontsize=8, fontweight='bold')
         plt.ylabel('Average Score', fontproperties=font_prop, fontsize=8, fontweight='bold')
-        plt.title('Top 5 Average Emotions', fontproperties=font_prop, fontsize=10, fontweight='bold')
+        plt.title('Top 5 Average Emotions', fontproperties=font_prop, fontsize=15, fontweight='bold')
         plt.ylim(0, y_max) # add upper bond
         plt.yticks(y_ticks, fontproperties=font_prop, fontsize=6, fontweight='bold')
         plt.xticks(rotation=45, ha='right', fontproperties=font_prop, fontsize=6, fontweight='bold')
@@ -263,32 +263,36 @@ def create_top_emotions_bar_chart(emotion_scores: dict, total_interactions: int)
     except Exception as e:
         print(f"Error creating top emotions chart: {e}")
         return None
-    
+
 def create_circular_progress_bar(score):
     try:
         font_path = os.path.abspath("static/fonts/Roboto-Regular.ttf")  
         font_prop = font_manager.FontProperties(fname=font_path)
         
-        fig, ax = plt.subplots(figsize=(4, 4))  # Increased from (3,3) to make image a little bigger
+        fig, ax = plt.subplots(figsize=(4, 4))  # Keep size consistent
         
         # Create the circular progress bar
-        wedgeprops = {'width': 0.3, 'edgecolor': 'white', 'linewidth': 3}
-        ax.pie([score, 100-score], colors=['#84d8b7', '#ddeeee'], startangle=90, counterclock=False, wedgeprops=wedgeprops)
+        wedgeprops = {'width': 0.3, 'edgecolor': 'white'}
+        wedges, texts = ax.pie([score, 100-score], colors=['#84d8b7', 'white'], 
+                               startangle=90, counterclock=False, wedgeprops=wedgeprops)
         
         # Add the percentage text in the center
-        ax.text(0.5, 0.5, f"{score}%", horizontalalignment='center', verticalalignment='center', 
-                fontsize=20, fontweight='bold', fontproperties=font_prop, color="#1d2f4b") # make sure they are all same color and bold
+        ax.text(0, 0, f"{score}%", ha='center', va='center', 
+                fontsize=30, fontweight='bold', fontproperties=font_prop, color="#1d2f4b") 
         
         # Remove the axis
-        ax.axis('equal')
-        ax.set_axis_off()
-        
+        ax.set_aspect('equal')  # Ensures the pie is circular
+        ax.set_xticks([])  # Hide x-ticks
+        ax.set_yticks([])  # Hide y-ticks
+        ax.spines[:].set_visible(False)  # Hide spines
+
         # Add title
-        plt.title("Lexical Quality Score", fontproperties=font_prop, fontsize=12, fontweight='bold', pad=30, color="#1d2f4b") # reduce to match fontsize and match color to fit overall theme
+        plt.title("Lexical Quality Score", fontproperties=font_prop, fontsize=15, 
+                  fontweight='bold', pad=20, color="#1d2f4b")
 
         # Save the plot to a BytesIO object
         img = io.BytesIO()
-        plt.savefig(img, format='png', dpi=200, bbox_inches='tight')
+        plt.savefig(img, format='png', dpi=200, bbox_inches='tight', transparent=True)
         img.seek(0)
         plt.close()
 
@@ -297,6 +301,7 @@ def create_circular_progress_bar(score):
     except Exception as e:
         print(f"Error creating circular progress bar: {e}")
         return None
+
 
 # --- WebSocket Event Handlers ---
 @socketio.on('connect')
@@ -542,7 +547,6 @@ def evaluation(total_interactions):
         top_emotions_chart=top_emotions_chart,
         lexical_score_chart=lexical_score_chart
     )
-
 
 @app.route('/new_conversation')
 def new_conversation():
