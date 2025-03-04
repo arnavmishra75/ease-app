@@ -326,7 +326,7 @@ def stop_conversation():
         scores = get_lexical_score(user_responses, lexical_encoder, lexical_model)
         if scores is not None:
             lexical_score = scores
-            print(f"Lexical Score: {lexical_score}")
+            #print(f"Lexical Score: {lexical_score}")
         else:
             print("Could not generate lexical score")
     else:
