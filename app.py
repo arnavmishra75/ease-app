@@ -263,6 +263,40 @@ def create_top_emotions_bar_chart(emotion_scores: dict, total_interactions: int)
     except Exception as e:
         print(f"Error creating top emotions chart: {e}")
         return None
+    
+def create_circular_progress_bar(score):
+    try:
+        font_path = os.path.abspath("static/fonts/Roboto-Regular.ttf")  
+        font_prop = font_manager.FontProperties(fname=font_path)
+        
+        fig, ax = plt.subplots(figsize=(4, 4))  # Increased from (3,3) to make image a little bigger
+        
+        # Create the circular progress bar
+        wedgeprops = {'width': 0.3, 'edgecolor': 'white', 'linewidth': 3}
+        ax.pie([score, 100-score], colors=['#84d8b7', '#ddeeee'], startangle=90, counterclock=False, wedgeprops=wedgeprops)
+        
+        # Add the percentage text in the center
+        ax.text(0.5, 0.5, f"{score}%", horizontalalignment='center', verticalalignment='center', 
+                fontsize=20, fontweight='bold', fontproperties=font_prop, color="#1d2f4b") # make sure they are all same color and bold
+        
+        # Remove the axis
+        ax.axis('equal')
+        ax.set_axis_off()
+        
+        # Add title
+        plt.title("Lexical Quality Score", fontproperties=font_prop, fontsize=12, fontweight='bold', pad=30, color="#1d2f4b") # reduce to match fontsize and match color to fit overall theme
+
+        # Save the plot to a BytesIO object
+        img = io.BytesIO()
+        plt.savefig(img, format='png', dpi=200, bbox_inches='tight')
+        img.seek(0)
+        plt.close()
+
+        # Encode as base64
+        return base64.b64encode(img.read()).decode()
+    except Exception as e:
+        print(f"Error creating circular progress bar: {e}")
+        return None
 
 # --- WebSocket Event Handlers ---
 @socketio.on('connect')
@@ -281,16 +315,18 @@ def stop_conversation():
     global total_interactions, user_responses, lexical_encoder, lexical_model
     print('Conversation stopped by client')
     stop_hume_connection()
+    lexical_score = None
     if lexical_model:
         print(f"User Responses:\n{user_responses}")  # Print the user responses
         scores = get_lexical_score(user_responses, lexical_encoder, lexical_model)
         if scores is not None:
-             print(f"Scores on Responses:\n{scores}")
+            lexical_score = scores
+            print(f"Lexical Score: {lexical_score}")
         else:
-            print("Could not generate scores")
+            print("Could not generate lexical score")
     else:
         print("Lexical Model did not load")
-    emit('redirect', {'url': url_for('evaluation', total_interactions=total_interactions)})
+    emit('redirect', {'url': url_for('evaluation', total_interactions=total_interactions, lexical_score=lexical_score)})
 
 # --- Hume API Integration ---
 async def hume_websocket_handler(message):
@@ -490,13 +526,23 @@ def evaluation(total_interactions):
         {"doubt": "#e74c3c", "anxiety": "#f39c12", "distress": "#95a5a6"}
     )
     top_emotions_chart = create_top_emotions_bar_chart(all_emotion_scores_overalls, total_interactions)
+    
+    # Calculate lexical score
+    lexical_score = None
+    if lexical_model and user_responses:
+        lexical_score = get_lexical_score(user_responses, lexical_encoder, lexical_model)
+    
+    # Create circular progress bar chart
+    lexical_score_chart = create_circular_progress_bar(lexical_score) if lexical_score is not None else None
 
     return render_template(
         'evaluation.html',
         positive_emotion_chart=positive_emotion_chart,
         negative_emotion_chart=negative_emotion_chart,
-        top_emotions_chart=top_emotions_chart
+        top_emotions_chart=top_emotions_chart,
+        lexical_score_chart=lexical_score_chart
     )
+
 
 @app.route('/new_conversation')
 def new_conversation():

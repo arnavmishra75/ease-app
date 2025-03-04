@@ -104,6 +104,44 @@
             border-radius: inherit; /* Optional: if you have a rounded container */
             background: linear-gradient(to bottom, #ffffff, #66c4d8);
         }
+
+        .bottom-charts {
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            width: 100%;
+            margin-bottom: 2rem;
+        }
+
+        .bottom-chart {
+            width: 45%;
+        }
+
+        .bottom-chart img {
+            max-height: 250px;
+            width: 100%;
+            object-fit: contain;
+        }
+        .chart-container {
+            display: flex;
+            justify-content: space-around; /* Distribute items evenly */
+            width: 100%;
+            margin-bottom: 2rem;
+            align-items: flex-start; /* Align items to the top */
+        }
+
+        .bottom-charts {
+        display: flex;
+        justify-content: space-around; /* Distribute items evenly */
+        align-items: center; /* Align items vertically */
+        width: 100%;
+        margin-bottom: 2rem;
+        }
+
+        .lexical-container {
+        text-align: center;
+        }
+
     </style>
 </head>
 <body>
@@ -120,8 +158,14 @@
         </div>
     </div>
 
-    <div>
-        <img src="data:image/png;base64,{{ top_emotions_chart }}" alt="Top Emotions Chart">
+    <div class="bottom-charts">
+        <div class = "lexical-container">
+        <img src="data:image/png;base64,{{ lexical_score_chart }}" alt="Lexical Quality Score" style="max-height: 250px;">
+        </div>
+        
+        <div class="bottom-chart">
+            <img src="data:image/png;base64,{{ top_emotions_chart }}" alt="Top Emotions Chart">
+        </div>
     </div>
 
     <a href="/new_conversation" class="btn">Start New Conversation</a>
