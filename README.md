@@ -1,1 +1,1 @@
-# ease-app
+# E.A.S.E (Empathy AI for Stressful Encounters): Your AI Guide to Defuse High Stress Talks with Empathy and Confidence.
