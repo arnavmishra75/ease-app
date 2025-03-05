@@ -19,40 +19,37 @@ from matplotlib import font_manager, patches
 import string
 import re
 
-# Initialize Flask and SocketIO
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'your_secret_key'  # change later
 socketio = SocketIO(app, async_mode='threading')
 matplotlib.use('Agg')  # use agg so that charts aren't rendered immediately (instead saved)
 
-# Load the model and encoder
+# load the model and encoder
 lexical_encoder = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
 try:
     lexical_model = load_model('models/lexical_model_scaled_outputs.keras')
 except Exception as e:
     print(f"Error loading model: {e}")
-    lexical_model = None  # Handle model loading failure
+    lexical_model = None 
 
-# Load environment variables
 load_dotenv()
 HUME_API_KEY = os.getenv("HUME_API_KEY")
 HUME_SECRET_KEY = os.getenv("HUME_SECRET_KEY")
 HUME_CONFIG_ID = os.getenv("HUME_CONFIG_ID")
 
-# Global Variables
+# globals 
 hume_socket = None
 hume_connected = False
 main_loop = None
 microphone_task = None
 byte_strs = Stream.new()
-filler_word_count = 0  # Initialize filler word counter
+filler_word_count = 0  
 all_emotion_scores_overalls = {}
 positive_emotion_scores = {"sympathy": [], "calmness": [], "interest": []}
 negative_emotion_scores = {"doubt": [], "anxiety": [], "distress": []}
 user_responses = []
 total_interactions = 0
 
-# --- Utility Functions ---
+# utility funcs
 
 def extract_top_n_emotions(emotion_scores: dict, n: int) -> dict:
     """Extracts the top N emotions from the emotion scores."""
@@ -74,6 +71,7 @@ def update_emotion_scores_overall(emotion_scores_overall: dict, emotion_scores: 
             emotion_scores_overall[key] = value
 
 def flatten_embeddings(df):
+    """Convert list of embeddings to per-col embeddings expanded"""
     embeddings_df = pd.DataFrame(df['embedding'].tolist())
     embeddings_df.columns = [f'embedding_{i}' for i in range(embeddings_df.shape[1])]
     df = df.drop(columns=['embedding']).join(embeddings_df)
@@ -101,7 +99,6 @@ def get_lexical_score(responses, encoder, model):
 def create_emotion_bar_chart(emotion_scores: dict):
     """Generates a bar chart of emotion scores and returns it as a base64 encoded string."""
     try:
-        # Add Roboto font
         font_path = os.path.abspath("static/fonts/Roboto-Regular.ttf")  
         font_prop = font_manager.FontProperties(fname=font_path)
         
@@ -109,54 +106,43 @@ def create_emotion_bar_chart(emotion_scores: dict):
         emotions = list(top_3_emotions.keys())
         scores = list(top_3_emotions.values())
 
-        # Create the bar chart
-        plt.figure(figsize=(8, 4))  # previous size
+        plt.figure(figsize=(8, 4)) 
         bars = plt.bar(emotions, scores, color='#84d8b7')  # green color
         plt.xlabel('Emotions', fontproperties=font_prop, fontsize=12, fontweight='bold')
         plt.ylabel('Scores', fontproperties=font_prop, fontsize=12, fontweight='bold')
         plt.title('Current Top 3 Emotions', fontproperties=font_prop, fontsize=14, fontweight='bold')
-        plt.ylim(0, max(scores) + 0.1)  # Adjust y-axis limit to make space for value labels
-        plt.yticks(np.arange(0, max(scores) + 0.1, 0.1), fontproperties=font_prop, fontsize=8, fontweight='bold')  # Y-axis increments of 0.05
-        plt.xticks(rotation=45, ha='right', fontproperties=font_prop, fontsize=8, fontweight='bold')  # Rotate emotion labels for readability
-        plt.tight_layout() # Add value labels above the bars
+        plt.ylim(0, max(scores) + 0.1) 
+        plt.yticks(np.arange(0, max(scores) + 0.1, 0.1), fontproperties=font_prop, fontsize=8, fontweight='bold')  # y-axis increments of 0.05
+        plt.xticks(rotation=45, ha='right', fontproperties=font_prop, fontsize=8, fontweight='bold')  # rotate emotion labels for readability
+        plt.tight_layout()
         for bar in bars:
             yval = bar.get_height()
             plt.text(bar.get_x() + bar.get_width()/2, yval, round(yval, 2), ha='center', va='bottom', 
                      fontproperties=font_prop, fontsize=8, fontweight='bold')
 
-        # Save the plot to a BytesIO object
+        # save the plot to a BytesIO object
         img = io.BytesIO()
         plt.savefig(img, format='png')
         plt.savefig(img, format='png', dpi=200)
         img.seek(0)
-        plt.close()  # Close the plot to free memory
+        plt.close()  
 
-        # Encode as base64
+        # encode as base64
         return base64.b64encode(img.read()).decode()
     except Exception as e:
         print(f"Error creating emotion chart: {e}")
         return None
     
 def create_line_chart(emotion_data: dict, title: str, ylabel: str, color_map: dict):
-    """
-    Generates a line chart for emotion trends over interactions.... Args:
-        emotion_data (dict): Dictionary of emotions and their scores over interactions.
-        title (str): Title of the chart.
-        ylabel (str): Title of the chart.
-        color_map (dict): Dictionary mapping emotion names to colors.
-
-    Returns:
-        str: Base64 encoded PNG image of the chart.
-    """
+    """Generates a line chart for emotion trends over interactions"""
     try:
         font_path = os.path.abspath("static/fonts/Roboto-Regular.ttf")  
         font_prop = font_manager.FontProperties(fname=font_path)
         
-        # Check if there are any emotions with scores
-        if not any(emotion_data.values()):  # This checks if all lists are empty
-            plt.figure()  # Create a new figure to avoid errors
+        if not any(emotion_data.values()):  # this checks if all lists are empty
+            plt.figure()  
             plt.text(0.5, 0.5, 'No data to display', ha='center', va='center', fontsize=12)
-            plt.axis('off')  # Turn off axis lines and ticks
+            plt.axis('off')  
             img = io.BytesIO()
             plt.savefig(img, format='png')
             img.seek(0)
@@ -164,29 +150,28 @@ def create_line_chart(emotion_data: dict, title: str, ylabel: str, color_map: di
             print(f"No data for line chart '{title}'. Returning empty chart.")
             return base64.b64encode(img.read()).decode()
             
-        # Determine maximum score for y-axis
+        # get maximum score for y-axis
         max_score = 0
         for scores in emotion_data.values():
             if scores:
                 max_score = max(max_score, max(scores))
         
-        y_max = max_score + 0.1  # Add buffer
-        y_ticks = np.arange(0, y_max + 0.05, 0.05)  # Generate ticks
+        y_max = max_score + 0.1  # buffer
+        y_ticks = np.arange(0, y_max + 0.05, 0.05)  
 
-        plt.figure(figsize=(6, 3))  # Reduced figure size
+        plt.figure(figsize=(6, 3))  
         
-        # Ensure there are interactions to plot
         num_interactions = len(next(iter(emotion_data.values()), []))
         if num_interactions == 0:
             plt.text(0.5, 0.5, 'No data to display', ha='center', va='center', fontsize=12)
-            plt.axis('off')  # Turn off axis lines and ticks
+            plt.axis('off')  
             img = io.BytesIO()
             plt.savefig(img, format='png')
             img.seek(0)
             plt.close()
             return base64.b64encode(img.read()).decode()
 
-        x_values = range(1, num_interactions + 1)  # Interactions start from 1
+        x_values = range(1, num_interactions + 1)  # so that interactions start from 1
 
         for emotion, scores in emotion_data.items():
             if scores:
@@ -198,7 +183,7 @@ def create_line_chart(emotion_data: dict, title: str, ylabel: str, color_map: di
         plt.yticks(y_ticks, fontproperties=font_prop, fontsize=6, fontweight='bold')
         plt.ylim(0, y_max)  # set upper bond for max
         plt.grid(True)
-        plt.legend(prop=font_prop, fontsize=6)  # Use font_prop for the legend
+        plt.legend(prop=font_prop, fontsize=6)
         plt.tight_layout()
 
         img = io.BytesIO()
@@ -212,39 +197,32 @@ def create_line_chart(emotion_data: dict, title: str, ylabel: str, color_map: di
         return None
 
 def create_top_emotions_bar_chart(emotion_scores: dict, total_interactions: int):
-    """
-    Generates a bar chart of the top 5 average emotions from the overall scores.
-
-    Args:
-        emotion_scores (dict): Dictionary of overall emotion scores.
-        total_interactions (int): Total number of interactions.... Returns:
-        str: Base64 encoded PNG image of the chart.
-    """
+    """Generates a bar chart of the top 5 average emotions from the overall scores. """
     try:
         font_path = os.path.abspath("static/fonts/Roboto-Regular.ttf")  
         font_prop = font_manager.FontProperties(fname=font_path)
         
-        # Calculate average scores
-        average_emotion_scores = {k: v / total_interactions for k, v in emotion_scores.items()} # Extract top 5 emotions
+        # calculate average scores
+        average_emotion_scores = {k: v / total_interactions for k, v in emotion_scores.items()} # get top 5 emotions
         top_5_emotions = extract_top_n_emotions(average_emotion_scores, 5)
         emotions = list(top_5_emotions.keys())
         scores = list(top_5_emotions.values())
             
-        max_score = max(scores) if scores else 0  # Determine max score for Y axis
-        y_max = max_score + 0.1  # Add buffer for chart
-        y_ticks = np.arange(0, y_max + 0.05, 0.05)  # Generate ticks
+        max_score = max(scores) if scores else 0  # determine max score for Y axis
+        y_max = max_score + 0.1  # buffer
+        y_ticks = np.arange(0, y_max + 0.05, 0.05)  
 
-        plt.figure(figsize=(6, 3))  # Increased figure size
+        plt.figure(figsize=(6, 3))  
         bars = plt.bar(emotions, scores, color='#84d8b7')
         plt.xlabel('Emotions', fontproperties=font_prop, fontsize=8, fontweight='bold')
         plt.ylabel('Average Score', fontproperties=font_prop, fontsize=8, fontweight='bold')
         plt.title('Top 5 Average Emotions', fontproperties=font_prop, fontsize=15, fontweight='bold', color = "#1d2f4b")
-        plt.ylim(0, y_max) # add upper bond
+        plt.ylim(0, y_max) 
         plt.yticks(y_ticks, fontproperties=font_prop, fontsize=6, fontweight='bold')
         plt.xticks(rotation=45, ha='right', fontproperties=font_prop, fontsize=6, fontweight='bold')
         plt.tight_layout()
 
-        # Add value labels above the bars
+  
         for bar in bars:
             yval = bar.get_height()
             plt.text(bar.get_x() + bar.get_width()/2, yval, round(yval, 2), ha='center', va='bottom', 
@@ -264,30 +242,27 @@ def create_top_emotions_bar_chart(emotion_scores: dict, total_interactions: int)
         return None
 
 def create_circular_progress_bar(score):
+    """Generate progress bar around lexical quality score"""
     try:
         font_path = os.path.abspath("static/fonts/Roboto-Regular.ttf")
         font_prop = font_manager.FontProperties(fname=font_path)
 
-        fig, ax = plt.subplots(figsize=(4, 4))  # Keep size consistent
+        fig, ax = plt.subplots(figsize=(4, 4))  
 
-        # Create the circular progress bar
         wedgeprops = {'width': 0.3, 'edgecolor': 'white'}
         ax.pie([score, 100 - score], colors=['#84d8b7', 'white'],
                startangle=90, counterclock=False, wedgeprops=wedgeprops)
 
-        # Add the percentage text in the center
+        # add the percentage text in the center
         ax.text(0, 0, f"{score}%", ha='center', va='center',
                 fontsize=30, fontweight='bold', fontproperties=font_prop, color="#1d2f4b")
 
-        # Ensure it's a circle
         ax.axis('equal')
 
-        # Hide the axes
         ax.spines[:].set_visible(False)
         ax.set_xticks([])
         ax.set_yticks([])
 
-        # Title outside the plot area
         ax.set_title('Lexical Quality Score', fontproperties=font_prop, fontsize=18,
                      fontweight='bold', color="#1d2f4b", pad=20)
 
@@ -302,7 +277,8 @@ def create_circular_progress_bar(score):
     except Exception as e:
         print(f"Error creating circular progress bar: {e}")
         return None
-# --- WebSocket Event Handlers ---
+    
+# event handlers for websocket
 @socketio.on('connect')
 def connect():
     print('Client connected')
@@ -332,7 +308,7 @@ def stop_conversation():
         print("Lexical Model did not load")
     emit('redirect', {'url': url_for('evaluation', total_interactions=total_interactions, lexical_score=lexical_score)})
 
-# --- Hume API Integration ---
+# hume integrations
 async def hume_websocket_handler(message):
     global filler_word_count, total_interactions, user_responses
     scores = {}
@@ -342,20 +318,20 @@ async def hume_websocket_handler(message):
         role = "E.A.S.E" if message.message.role.upper() == "ASSISTANT" else "You"
         message_text = message.message.content
         
-        # Collect User Responses
+        # add to user responses
         if role == "You":
             user_responses.append(message_text)
 
-        # Replace standalone "ease" variations with "E.A.S.E"
+        # THIS REPLACES standalone "ease" variations with "E.A.S.E" 
         ease_vars = [r'\bease\b', r'\bease\.\b', r'\bease\?\b', r'\bease\!\b', r'\bease\,\b',
                      r'\bEase\b', r'\bEase\.\b', r'\bEase\?\b', r'\bEase\!\b', r'\bEase\,\b']
         for var in ease_vars:
             message_text = re.sub(var, "E.A.S.E", message_text)
         
-        # Count filler words (only for user messages)
+        # count filler words
         if role == "You":
             words = message_text.lower().split()
-            # Remove punctuation from each word before checking
+            # remove punct before checks
             words = [word.strip(string.punctuation) for word in words]
             filler_word_count += sum(1 for word in words if word in filler_words)
 
@@ -453,11 +429,11 @@ def stop_hume_connection():
         main_loop.call_soon_threadsafe(main_loop.stop)
         asyncio.run_coroutine_threadsafe(shutdown_microphone(), main_loop)
         
-        # Wait for the loop to actually stop
+        # wait for the loop to ACTUALLY stop
         try:
             main_loop.run_until_complete(asyncio.sleep(0.1))
         except RuntimeError:
-            pass  # The loop was already closed
+            pass  # if closed already
 
     if hume_socket:
         hume_socket = None
@@ -528,7 +504,7 @@ async def hume_client_task():
             print("Hume client connected.")
             microphone_task = asyncio.create_task(hume_microphone_handler(socket))
             try:
-                await asyncio.Future()  # Keep the connection open indefinitely
+                await asyncio.Future()  # keep the connection open indefinitely
             except asyncio.CancelledError:
                 print("Hume client task cancelled.")
             except Exception as e:
@@ -559,12 +535,12 @@ def evaluation(total_interactions):
     )
     top_emotions_chart = create_top_emotions_bar_chart(all_emotion_scores_overalls, total_interactions)
     
-    # Calculate lexical score
+    # get lexical score
     lexical_score = None
     if lexical_model and user_responses:
         lexical_score = get_lexical_score(user_responses, lexical_encoder, lexical_model)
     
-    # Create circular progress bar chart
+    # generate progress bar chart
     lexical_score_chart = create_circular_progress_bar(lexical_score) if lexical_score is not None else None
 
     return render_template(
@@ -577,15 +553,15 @@ def evaluation(total_interactions):
 
 @app.route('/new_conversation')
 def new_conversation():
-    reset_global_variables() # reset everything
-    session.clear()  # Clears flask session variables
-    stop_hume_connection()  # Stop the current Hume connection
-    start_hume_connection()  # Start a new Hume connection
-    return redirect(url_for('chat'))  # Redirect to the chat page
+    reset_global_variables() 
+    session.clear()  # clear flask session variables
+    stop_hume_connection()  
+    start_hume_connection()  
+    return redirect(url_for('chat'))  # go back to the conversation page
 
 @app.route('/chat')
 def chat():
-    return render_template('index.html')  # Conversation page
+    return render_template('index.html')  # conversation page
 
 # --- Main ---
 if __name__ == '__main__':
