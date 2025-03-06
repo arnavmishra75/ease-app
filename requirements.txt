@@ -9,3 +9,5 @@ huggingface_hub
 sentence-transformers
 tensorflow
 scikit-learn
+tf-keras
+keras
