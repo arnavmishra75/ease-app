@@ -20,6 +20,7 @@ import string
 import re
 
 app = Flask(__name__)
+app.config['SECRET_KEY'] = os.getenv("FLASK_SECRET_KEY")
 socketio = SocketIO(app, async_mode='threading')
 matplotlib.use('Agg')  # use agg so that charts aren't rendered immediately (instead saved)
 
