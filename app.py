@@ -202,19 +202,34 @@ def create_top_emotions_bar_chart(emotion_scores: dict, total_interactions: int)
     try:
         font_path = os.path.abspath("static/fonts/Roboto-Regular.ttf")  
         font_prop = font_manager.FontProperties(fname=font_path)
+
+        greens = ['admiration', 'adoration', 'aesthetic_appreciation', 'amusement', 'awe', 'calmness', 'concentration', 'contemplation', 'contentment', 'desire', 'determination', 'ecstasy' 'empathic_pain', 'entrancement', 'excitement',  'interest', 'joy', 'love', 'nostalgia', 'pride',  'realization', 'relief', 'romance',  'satisfaction', 'surprise_positive', 'sympathy', 'triumph']
+        reds = ['anger', 'anxiety' 'awkwardness', 'boredom', 'confusion',  'contempt', 'craving',  'disappointment', 'disgust', 'distress', 'doubt',  'embarrassment', 'envy', 'fear', 'guilt', 'horror', 'pain',  'sadness',  'shame', 'surprise_negative', 'tiredness']
+        green_top_5_emotions, green_top_5_scores = [], []
+        red_top_5_emotions, red_top_5_scores = [], []
         
         # calculate average scores
         average_emotion_scores = {k: v / total_interactions for k, v in emotion_scores.items()} # get top 5 emotions
         top_5_emotions = extract_top_n_emotions(average_emotion_scores, 5)
-        emotions = list(top_5_emotions.keys())
+        #emotions = list(top_5_emotions.keys())
         scores = list(top_5_emotions.values())
+
+        for emotion in top_5_emotions.keys():
+            if emotion in greens:
+                green_top_5_emotions.append(emotion)
+                green_top_5_scores.append(top_5_emotions[emotion])
+            else:
+                red_top_5_emotions.append(emotion)
+                red_top_5_scores.append(top_5_emotions[emotion])
+
             
         max_score = max(scores) if scores else 0  # determine max score for Y axis
         y_max = max_score + 0.1  # buffer
         y_ticks = np.arange(0, y_max + 0.05, 0.05)  
 
         plt.figure(figsize=(6, 3))  
-        bars = plt.bar(emotions, scores, color='#84d8b7')
+        bars_green = plt.bar(green_top_5_emotions, green_top_5_scores, color='#84d8b7')
+        bars_red = plt.bar(red_top_5_emotions, red_top_5_scores, color='#e74c3c')
         plt.xlabel('Emotions', fontproperties=font_prop, fontsize=8, fontweight='bold')
         plt.ylabel('Average Score', fontproperties=font_prop, fontsize=8, fontweight='bold')
         plt.title('Top 5 Average Emotions', fontproperties=font_prop, fontsize=15, fontweight='bold', color = "#1d2f4b")
@@ -224,7 +239,12 @@ def create_top_emotions_bar_chart(emotion_scores: dict, total_interactions: int)
         plt.tight_layout()
 
   
-        for bar in bars:
+        for bar in bars_green:
+            yval = bar.get_height()
+            plt.text(bar.get_x() + bar.get_width()/2, yval, round(yval, 2), ha='center', va='bottom', 
+                     fontproperties=font_prop, fontsize=6, fontweight='bold')
+        
+        for bar in bars_red:
             yval = bar.get_height()
             plt.text(bar.get_x() + bar.get_width()/2, yval, round(yval, 2), ha='center', va='bottom', 
                      fontproperties=font_prop, fontsize=6, fontweight='bold')
